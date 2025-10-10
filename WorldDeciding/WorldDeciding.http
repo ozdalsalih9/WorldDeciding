@@ -1,0 +1,6 @@
+@WorldDeciding_HostAddress = http://localhost:5207
+
+GET {{WorldDeciding_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

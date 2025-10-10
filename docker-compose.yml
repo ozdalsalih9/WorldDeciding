@@ -1,0 +1,25 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: worlddeciding_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: worlddeciding
+      POSTGRES_PASSWORD: mstF002255
+      POSTGRES_DB: worlddeciding
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7
+    container_name: worlddeciding_redis
+    restart: always
+    ports:
+      - "6379:6379"
+
+volumes:
+  pgdata:

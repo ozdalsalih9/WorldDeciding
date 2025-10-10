@@ -1,0 +1,54 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.14.36414.22
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WorldDeciding", "WorldDeciding\WorldDeciding.csproj", "{60EE4635-9FC5-4071-A637-04CF3CA562A7}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WorldDeciding.Domain", "WorldDeciding.Domain\WorldDeciding.Domain.csproj", "{7DAB9913-4364-4CF5-AD8F-0BB5DD58D240}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WorldDeciding.Application", "WorldDeciding.Application\WorldDeciding.Application.csproj", "{C34F1272-C31B-4057-AC07-E8A4163768DB}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WorldDeciding.Infrastructure", "WorldDeciding.Infrastructure\WorldDeciding.Infrastructure.csproj", "{B598746A-547F-4EE9-955E-7E576A6EA15F}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WorldDeciding.UnitTests", "WorldDeciding.UnitTests\WorldDeciding.UnitTests.csproj", "{2B338780-DF74-4BB1-95EF-17B962386488}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{8EC462FD-D22E-90A8-E5CE-7E832BA40C5D}"
+	ProjectSection(SolutionItems) = preProject
+		docker-compose.yml = docker-compose.yml
+	EndProjectSection
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{60EE4635-9FC5-4071-A637-04CF3CA562A7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{60EE4635-9FC5-4071-A637-04CF3CA562A7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{60EE4635-9FC5-4071-A637-04CF3CA562A7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{60EE4635-9FC5-4071-A637-04CF3CA562A7}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7DAB9913-4364-4CF5-AD8F-0BB5DD58D240}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7DAB9913-4364-4CF5-AD8F-0BB5DD58D240}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7DAB9913-4364-4CF5-AD8F-0BB5DD58D240}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7DAB9913-4364-4CF5-AD8F-0BB5DD58D240}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C34F1272-C31B-4057-AC07-E8A4163768DB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C34F1272-C31B-4057-AC07-E8A4163768DB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C34F1272-C31B-4057-AC07-E8A4163768DB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C34F1272-C31B-4057-AC07-E8A4163768DB}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B598746A-547F-4EE9-955E-7E576A6EA15F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B598746A-547F-4EE9-955E-7E576A6EA15F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B598746A-547F-4EE9-955E-7E576A6EA15F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B598746A-547F-4EE9-955E-7E576A6EA15F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2B338780-DF74-4BB1-95EF-17B962386488}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2B338780-DF74-4BB1-95EF-17B962386488}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2B338780-DF74-4BB1-95EF-17B962386488}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2B338780-DF74-4BB1-95EF-17B962386488}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {AA73E0EA-96DA-4AC8-BA58-36D19B12BE68}
+	EndGlobalSection
+EndGlobal
