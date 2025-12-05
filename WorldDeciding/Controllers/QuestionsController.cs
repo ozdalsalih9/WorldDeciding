@@ -1,5 +1,7 @@
 ﻿using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using WorldDeciding.Application.Common.Interfaces;
 using WorldDeciding.Application.Common.Questions.Queries;
 using WorldDeciding.Application.Questions.Commands.CreateQuestion;
 using WorldDeciding.Application.Questions.Dtos;
@@ -16,7 +18,8 @@ public class QuestionsController : ControllerBase
 
     /// <summary>
     /// Yeni soru oluşturur (Binary için tam 2 seçenek, Multi için en az 3).
-    /// </summary>
+    /// </summary
+    [Authorize(Roles = "Admin")]
     [HttpPost]
     public async Task<ActionResult<QuestionDto>> Create([FromBody] CreateQuestionCommand cmd)
     {
@@ -38,28 +41,54 @@ public class QuestionsController : ControllerBase
         var result = await _mediator.Send(new ListQuestionsQuery(categoryId, type, page, pageSize));
         return Ok(result);
     }
+    [HttpGet("test-redis")]
+    public async Task<IActionResult> TestRedis(
+    [FromServices] IAppCache appCache)   // IDistributedCache de kullanabilirsin ama biz abstraction’ı kullanalım
+    {
+        var key = "test:hello";
+        await appCache.SetAsync(key, new
+        {
+            Message = "Hello from WorldDeciding",
+            Time = DateTime.UtcNow
+        }, TimeSpan.FromMinutes(5));
 
+        var value = await appCache.GetAsync<object>(key);
+        return Ok(value);
+    }
     /// <summary>
     /// Soru detayı (opsiyonel – Query handler’ını eklediysen çalışır).
     /// </summary>
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<QuestionDto>> GetById([FromRoute] Guid id)
     {
-        // Eğer GetQuestionByIdQuery’yi yazdıysan aç:
-        // var result = await _mediator.Send(new GetQuestionByIdQuery(id));
-        // return result is null ? NotFound() : Ok(result);
-
-        // Henüz yazmadıysan şimdilik 501 döner:
-        return StatusCode(501, "GetQuestionByIdQuery henüz uygulanmadı.");
+        var dto = await _mediator.Send(new GetQuestionByIdQuery(id));
+        return dto is null ? NotFound() : Ok(dto);
     }
 
     /// <summary>
     /// Soru istatistikleri: seçenek dağılımı ve ülke kırılımı.
     /// </summary>
-    [HttpGet("{id:guid}/stats")]
-    public async Task<ActionResult<QuestionStatsDto>> Stats([FromRoute] Guid id)
+    [HttpGet("{id}/stats")]
+    public async Task<IActionResult> GetStats(
+    Guid id,
+    [FromServices] IAppCache cache)
     {
+        var cacheKey = $"question:{id}:stats";
+
+        var cached = await cache.GetAsync<QuestionStatsDto>(cacheKey);
+        if (cached != null)
+        {
+            return Ok(cached);
+        }
+
+        // 🔴 HATALI
+        // var result = await _mediator.Send(new GetQuestionStatsQuery { QuestionId = id });
+
+        // 🟢 DOĞRUSU
         var result = await _mediator.Send(new GetQuestionStatsQuery(id));
+
+        await cache.SetAsync(cacheKey, result, TimeSpan.FromMinutes(1));
+
         return Ok(result);
     }
 

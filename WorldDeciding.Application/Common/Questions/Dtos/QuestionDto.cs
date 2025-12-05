@@ -8,5 +8,5 @@ public class QuestionDto
     public string Title { get; set; } = default!;
     public QuestionType Type { get; set; }
     public Guid? CategoryId { get; set; }
-    public List<string> Options { get; set; } = new();
+    public List<OptionDto> Options { get; init; } = new();
 }

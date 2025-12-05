@@ -1,10 +1,14 @@
-﻿using Microsoft.AspNetCore.Identity;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
-using WorldDeciding.Infrastructure.Identity;
+using WorldDeciding.Infrastructure.Identity; // AppUser & Gender burada
+using WorldDeciding.Application.Common.Auth;
+
+
 
 namespace WorldDeciding.Controllers;
 
@@ -16,33 +20,115 @@ public class AuthController : ControllerBase
     private readonly IConfiguration _cfg;
 
     public AuthController(UserManager<AppUser> users, IConfiguration cfg)
-    { _users = users; _cfg = cfg; }
+    {
+        _users = users;
+        _cfg = cfg;
+    }
 
-    public record RegisterReq(string Email, string Password, string? CountryCode);
+    // ==== DTOs ====
+    public record RegisterReq(
+        string Email,
+        string Password,
+        string? CountryCode,
+        DateOnly? BirthDate,     // "YYYY-MM-DD"
+        short? Gender            // 0..4
+    );
+
     public record LoginReq(string Email, string Password);
-    public record AuthRes(string Token, string Email, string? CountryCode);
+
+    public record AuthRes(
+        string Token,
+        string Email,
+        string? CountryCode,
+        DateOnly? BirthDate,
+        short Gender,            // 0..4
+        string[] Roles
+    );
+
+    // ==== Endpoints ====
 
     [HttpPost("register")]
-    public async Task<ActionResult<AuthRes>> Register(RegisterReq req)
+    [AllowAnonymous]
+    public async Task<ActionResult<AuthRes>> Register([FromBody] RegisterRequest req)
     {
-        var user = new AppUser { UserName = req.Email, Email = req.Email, CountryCode = req.CountryCode };
-        var result = await _users.CreateAsync(user, req.Password);
-        if (!result.Succeeded) return BadRequest(result.Errors);
+        // Basit kontroller (Identity de ek kontroller yapar)
+        if (string.IsNullOrWhiteSpace(req.Email))
+            return BadRequest(new { message = "Email is required." });
+        if (string.IsNullOrWhiteSpace(req.Password) || req.Password.Length < 6)
+            return BadRequest(new { message = "Password must be at least 6 characters." });
 
-        return Ok(new AuthRes(GenerateJwt(user), user.Email!, user.CountryCode));
+        // 13+ yaş kuralı (opsiyonel ama önerilir)
+        if (req.BirthDate is DateOnly dob)
+        {
+            var today = DateOnly.FromDateTime(DateTime.UtcNow);
+            var age = today.Year - dob.Year - (today < dob.AddYears(today.Year - dob.Year) ? 1 : 0);
+            if (age < 13) return BadRequest(new { message = "Users must be 13+." });
+        }
+
+        // Gender aralığı
+        if (req.Gender is short g && (g < 0 || g > 4))
+            return BadRequest(new { message = "Invalid gender value." });
+
+        // Email tekilliği
+        var exists = await _users.FindByEmailAsync(req.Email);
+        if (exists is not null)
+            return BadRequest(new { message = "Email is already in use." });
+
+        // Kullanıcı oluştur
+        var user = new AppUser
+        {
+            Id = Guid.NewGuid(),
+            UserName = req.Email,
+            Email = req.Email,
+            CountryCode = req.CountryCode,
+            BirthDate = req.BirthDate,
+            Gender = (req.Gender is short gv) ? (Gender)gv : Gender.Unknown
+        };
+
+        var result = await _users.CreateAsync(user, req.Password);
+        if (!result.Succeeded)
+            return BadRequest(new { errors = result.Errors });
+
+        // (İsteğe bağlı) Varsayılan rol ata: await _users.AddToRoleAsync(user, "User");
+
+        // Roller & token
+        var roles = (await _users.GetRolesAsync(user)).ToArray();
+        var token = await GenerateJwtAsync(user, roles);
+
+        return Ok(new AuthRes(
+            token,
+            user.Email!,
+            user.CountryCode,
+            user.BirthDate,
+            (short)user.Gender,
+            roles
+        ));
     }
 
     [HttpPost("login")]
-    public async Task<ActionResult<AuthRes>> Login(LoginReq req)
+    [AllowAnonymous]
+    public async Task<ActionResult<AuthRes>> Login([FromBody] LoginReq req)
     {
         var user = await _users.FindByEmailAsync(req.Email);
         if (user is null || !await _users.CheckPasswordAsync(user, req.Password))
-            return Unauthorized();
+            return Unauthorized(new { message = "Invalid email or password." });
 
-        return Ok(new AuthRes(GenerateJwt(user), user.Email!, user.CountryCode));
+        var roles = (await _users.GetRolesAsync(user)).ToArray();
+        var token = await GenerateJwtAsync(user, roles);
+
+        return Ok(new AuthRes(
+            token,
+            user.Email!,
+            user.CountryCode,
+            user.BirthDate,
+            (short)user.Gender,
+            roles
+        ));
     }
 
-    private string GenerateJwt(AppUser user)
+    // ==== Helpers ====
+
+    private async Task<string> GenerateJwtAsync(AppUser user, string[] roles)
     {
         var jwt = _cfg.GetSection("Jwt");
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwt["Key"]!));
@@ -51,16 +137,27 @@ public class AuthController : ControllerBase
         var claims = new List<Claim>
         {
             new(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
-            new(JwtRegisteredClaimNames.Email, user.Email ?? ""),
-            new("country", user.CountryCode ?? "")
+            new(JwtRegisteredClaimNames.Email, user.Email ?? string.Empty),
+            new("country", user.CountryCode ?? string.Empty),
         };
+
+        // Opsiyonel demografi claim'leri (UI tarafında gösterim için işine yarayabilir)
+        if (user.BirthDate is DateOnly dob)
+            claims.Add(new Claim("birthdate", dob.ToString("yyyy-MM-dd")));
+        claims.Add(new Claim("gender", ((short)user.Gender).ToString()));
+
+        // Role claim'leri
+        foreach (var r in roles)
+            claims.Add(new Claim(ClaimTypes.Role, r));
 
         var token = new JwtSecurityToken(
             issuer: jwt["Issuer"],
             audience: jwt["Audience"],
             claims: claims,
             expires: DateTime.UtcNow.AddDays(7),
-            signingCredentials: creds);
+            signingCredentials: creds
+        );
+
         return new JwtSecurityTokenHandler().WriteToken(token);
     }
 }

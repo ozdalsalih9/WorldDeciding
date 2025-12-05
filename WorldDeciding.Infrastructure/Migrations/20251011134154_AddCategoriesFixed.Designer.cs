@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using WorldDeciding.Infrastructure.Persistence;
@@ -11,9 +12,11 @@ using WorldDeciding.Infrastructure.Persistence;
 namespace WorldDeciding.Infrastructure.Migrations
 {
     [DbContext(typeof(WorldDecidingDbContext))]
-    partial class WorldDecidingDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251011134154_AddCategoriesFixed")]
+    partial class AddCategoriesFixed
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -254,9 +257,6 @@ namespace WorldDeciding.Infrastructure.Migrations
                     b.Property<Guid>("QuestionId")
                         .HasColumnType("uuid");
 
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid");
 
@@ -306,9 +306,6 @@ namespace WorldDeciding.Infrastructure.Migrations
                     b.Property<int>("AccessFailedCount")
                         .HasColumnType("integer");
 
-                    b.Property<DateOnly?>("BirthDate")
-                        .HasColumnType("date");
-
                     b.Property<string>("ConcurrencyStamp")
                         .IsConcurrencyToken()
                         .HasColumnType("text");
@@ -326,9 +323,6 @@ namespace WorldDeciding.Infrastructure.Migrations
 
                     b.Property<bool>("EmailConfirmed")
                         .HasColumnType("boolean");
-
-                    b.Property<short>("Gender")
-                        .HasColumnType("smallint");
 
                     b.Property<bool>("LockoutEnabled")
                         .HasColumnType("boolean");

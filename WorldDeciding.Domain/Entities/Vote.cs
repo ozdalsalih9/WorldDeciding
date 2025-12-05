@@ -14,6 +14,7 @@ public class Vote
     public Guid OptionId { get; set; }
     public Guid UserId { get; set; }           // anonymous oylar için ileride nullable yapılabilir
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? UpdatedAt { get; set; }
 
     // Ülke bilgisi (IP saklanmayacak!)
     public string? CountryCode { get; set; }   // ISO-3166-1 alpha-2 (TR, US...)

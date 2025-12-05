@@ -40,8 +40,12 @@ public class CreateQuestionHandler : IRequestHandler<CreateQuestionCommand, Ques
         {
             Id = q.Id,
             Title = q.Title,
+            CategoryId = q.CategoryId,
             Type = q.Type,
-            Options = q.Options.Select(o => o.Text).ToList()
+            Options = q.Options
+         .Select(o => new OptionDto { Id = o.Id, Text = o.Text })
+         .ToList()
         };
+
     }
 }

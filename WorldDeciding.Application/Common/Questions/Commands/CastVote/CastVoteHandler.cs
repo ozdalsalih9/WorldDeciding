@@ -32,10 +32,35 @@ public class CastVoteHandler : IRequestHandler<CastVoteCommand, Unit>
         // 1) Option-Question eşleşiyor mu?
         var exists = await _db.Options
             .AnyAsync(o => o.Id == request.OptionId && o.QuestionId == request.QuestionId, ct);
-        if (!exists) throw new InvalidOperationException("Option/Question mismatch");
 
-        // 2) Ülke belirleme (beyan + IP'den çıkarım)
-        string? declared = _client.DeclaredCountryIso2;
+        if (!exists)
+            throw new InvalidOperationException("Option/Question mismatch.");
+
+        // 2) Kullanıcı bilgisi (JWT)
+        var httpContext = _http.HttpContext;
+        if (httpContext?.User?.Identity is not { IsAuthenticated: true })
+            throw new UnauthorizedAccessException("User must be authenticated to vote.");
+
+        var principal = httpContext.User;
+
+        var idClaim = principal.FindFirst(ClaimTypes.NameIdentifier)
+                     ?? principal.FindFirst(JwtRegisteredClaimNames.Sub);
+
+        if (idClaim == null || !Guid.TryParse(idClaim.Value, out var userId))
+            throw new UnauthorizedAccessException("Cannot resolve user id from token.");
+
+        // 🔹 BURASI ÖNEMLİ:
+        // 3) Beyan edilen ülke:
+        //    Önce JWT'deki "country" claim'ini kullan,
+        //    o boşsa X-Country header'ı (ClientContext.DeclaredCountryIso2) dene.
+        string? declared = principal.FindFirst("country")?.Value;
+        if (string.IsNullOrWhiteSpace(declared))
+            declared = _client.DeclaredCountryIso2;
+
+        if (string.IsNullOrWhiteSpace(declared))
+            declared = null;
+
+        // 4) IP'den çıkarılan ülke (GeoIP)
         string? inferred = null;
         double confidence = 0.0;
         string provider = "Unknown";
@@ -43,52 +68,58 @@ public class CastVoteHandler : IRequestHandler<CastVoteCommand, Unit>
         var ip = _client.ClientIp;
         if (ip is not null)
         {
-            var res = await _geo.ResolveAsync(ip, ct);
-            inferred = res.countryIso2;
-            confidence = res.confidence;
-            provider = res.provider;
-        }
-
-        string? finalCountry = declared ?? inferred;
-        var source = declared is not null ? CountrySource.Declared
-                                          : (inferred is not null ? CountrySource.Inferred : CountrySource.Unknown);
-
-        // 3) JWT'den kullanıcı Id'si (giriş yapılmışsa)
-        Guid userId = Guid.Empty;
-
-        // DÜZELTİLMİŞ KISIM - Doğrudan Microsoft'un IHttpContextAccessor'unu kullan
-        var httpContext = _http.HttpContext;
-        if (httpContext != null)
-        {
-            var user = httpContext.User;
-            if (user.Identity != null && user.Identity.IsAuthenticated)
+            try
             {
-                var idClaim = user.FindFirst(ClaimTypes.NameIdentifier)
-                            ?? user.FindFirst(JwtRegisteredClaimNames.Sub);
-
-                var idStr = idClaim?.Value;
-
-                if (!string.IsNullOrWhiteSpace(idStr) && Guid.TryParse(idStr, out var parsed))
-                {
-                    userId = parsed;
-                }
+                var (iso2, conf, prov) = await _geo.ResolveAsync(ip, ct);
+                inferred = iso2;
+                confidence = conf;
+                provider = prov;
+            }
+            catch
+            {
+                inferred = null;
+                confidence = 0.0;
+                provider = "GeoIpError";
             }
         }
 
-        // 4) Oy kaydı
-        var vote = new Vote
-        {
-            Id = Guid.NewGuid(),
-            QuestionId = request.QuestionId,
-            OptionId = request.OptionId,
-            UserId = userId,
-            CountryCode = finalCountry,
-            CountrySource = source,
-            CountryProvider = provider,
-            CountryConfidence = confidence
-        };
+        // 5) Son ülke ve kaynak tipi
+        var finalCountry = declared ?? inferred;
+        var source = declared is not null
+            ? CountrySource.Declared
+            : (inferred is not null ? CountrySource.Inferred : CountrySource.Unknown);
 
-        _db.Votes.Add(vote);
+        // 6) Aynı kullanıcı aynı soruya daha önce oy vermiş mi? (upsert)
+        var existingVote = await _db.Votes
+            .FirstOrDefaultAsync(v => v.UserId == userId && v.QuestionId == request.QuestionId, ct);
+
+        if (existingVote is null)
+        {
+            var vote = new Vote
+            {
+                Id = Guid.NewGuid(),
+                QuestionId = request.QuestionId,
+                OptionId = request.OptionId,
+                UserId = userId,
+                CountryCode = finalCountry,
+                CountrySource = source,
+                CountryProvider = provider,
+                CountryConfidence = confidence,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            _db.Votes.Add(vote);
+        }
+        else
+        {
+            existingVote.OptionId = request.OptionId;
+            existingVote.CountryCode = finalCountry;
+            existingVote.CountrySource = source;
+            existingVote.CountryProvider = provider;
+            existingVote.CountryConfidence = confidence;
+            existingVote.UpdatedAt = DateTime.UtcNow;
+        }
+
         await _db.SaveChangesAsync(ct);
         return Unit.Value;
     }

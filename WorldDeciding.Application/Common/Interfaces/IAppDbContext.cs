@@ -10,6 +10,6 @@ public interface IAppDbContext
     DbSet<Option> Options { get; }
     DbSet<Vote> Votes { get; }
     DbSet<Comment> Comments { get; }
-
+    DbSet<TEntity> Set<TEntity>() where TEntity : class;
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

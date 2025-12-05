@@ -1,64 +1,66 @@
 using FluentValidation;
+using FluentValidation.AspNetCore;
 using MediatR;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.StackExchangeRedis;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi.Models;
 using Serilog;
 using System.Text;
-using WorldDeciding.Application; // Assembly marker için (birazdan ekleyeceðiz)
+using WorldDeciding.Application;                        // ApplicationAssemblyMarker
 using WorldDeciding.Application.Common.Interfaces;
 using WorldDeciding.Infrastructure.Geo;
 using WorldDeciding.Infrastructure.Identity;
 using WorldDeciding.Infrastructure.Persistence;
+using WorldDeciding.Infrastructure.Services;
 using WorldDeciding.Services;
-using WorldDeciding.Domain.Entities;
-using WorldDeciding.Infrastructure.Persistence;
-
 var builder = WebApplication.CreateBuilder(args);
 
-// Serilog (isteðe baðlý)
+// --- Logging ---
 builder.Host.UseSerilog((ctx, lc) => lc
     .ReadFrom.Configuration(ctx.Configuration)
     .WriteTo.Console());
 
-// DbContext + Npgsql
+// --- DbContext ---
 builder.Services.AddDbContext<WorldDecidingDbContext>(opt =>
     opt.UseNpgsql(builder.Configuration.GetConnectionString("Default")));
 
-// Identity
+// IAppDbContext -> DbContext
+builder.Services.AddScoped<IAppDbContext>(sp => sp.GetRequiredService<WorldDecidingDbContext>());
+
+// --- Identity ---
 builder.Services.AddIdentityCore<AppUser>(opt => { })
     .AddRoles<AppRole>()
     .AddEntityFrameworkStores<WorldDecidingDbContext>();
 
-builder.Services.AddDbContext<WorldDecidingDbContext>(opt =>
-    opt.UseNpgsql(builder.Configuration.GetConnectionString("Default")));
-
-// IAppDbContext -> WorldDecidingDbContext baðla
-builder.Services.AddScoped<IAppDbContext>(sp => sp.GetRequiredService<WorldDecidingDbContext>());
-
 builder.Services.AddHttpContextAccessor();
 
-// GeoIP Resolver
-builder.Services.AddSingleton<IGeoIpResolver, MaxMindGeoIpResolver>();
+// --- App services ---
+builder.Services.AddSingleton<IGeoIpResolver, Ip2LocationGeoIpResolver>();
 
-// Client context
 builder.Services.AddScoped<IClientContext, ClientContext>();
 
-// (Redis cache'i ileride kullanacaksan)
-// builder.Services.AddStackExchangeRedisCache(o => o.Configuration = builder.Configuration["Redis:Configuration"]);
+// --- CORS ---
+builder.Services.AddCors(o => o.AddPolicy("frontend", p => p
+    .WithOrigins("http://localhost:5173")
+    .AllowAnyHeader()
+    .AllowAnyMethod()
+    .AllowCredentials()));
 
-// Proxy header'larýný güvenle kullanmak istersen:
+// --- Forwarded headers (opsiyonel) ---
 builder.Services.Configure<ForwardedHeadersOptions>(opts =>
 {
     opts.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
-    // Güvenilir proxy IP'lerini istersen buraya da ekleyebilirsin
 });
 
-// JWT (ileride kullanacaðýz)
+// --- Authentication / JWT ---
 var jwt = builder.Configuration.GetSection("Jwt");
 var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwt["Key"]!));
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+
+builder.Services
+    .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(o =>
     {
         o.TokenValidationParameters = new TokenValidationParameters
@@ -72,22 +74,69 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
     });
 
-// MediatR + FluentValidation + AutoMapper
+// --- MediatR / Validators / AutoMapper ---
 builder.Services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(ApplicationAssemblyMarker).Assembly));
 builder.Services.AddValidatorsFromAssembly(typeof(ApplicationAssemblyMarker).Assembly);
 builder.Services.AddAutoMapper(typeof(ApplicationAssemblyMarker).Assembly);
 
-builder.Services.AddControllers();
+// --- Controllers + JSON options ---
+builder.Services
+    .AddControllers()
+    .AddJsonOptions(o =>
+    {
+        // .NET 8'de DateOnly native; ekstra converter gerekmez.
+        // .NET 7 ise burada DateOnly converter ekleyebilirsin.
+    });
+
+// --- FluentValidation (MVC otomatik) ---
+builder.Services.AddFluentValidationAutoValidation();
+
+// --- Swagger ---
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(c =>
+{
+    c.SwaggerDoc("v1", new OpenApiInfo
+    {
+        Title = "WorldDeciding API",
+        Version = "v1"
+    });
 
-// CORS (Next.js için)
-builder.Services.AddCors(o => o.AddPolicy("frontend", p => p
-    .WithOrigins("http://localhost:3000")
-    .AllowAnyHeader().AllowAnyMethod().AllowCredentials()));
+    var jwtSecurityScheme = new OpenApiSecurityScheme
+    {
+        Scheme = "bearer",
+        BearerFormat = "JWT",
+        Name = "Authorization",
+        In = ParameterLocation.Header,
+        Type = SecuritySchemeType.Http,
+        Description = "JWT token'ýný gir. Örn: Bearer eyJhbGciOi...",
 
+        Reference = new OpenApiReference
+        {
+            Id = JwtBearerDefaults.AuthenticationScheme,
+            Type = ReferenceType.SecurityScheme
+        }
+    };
+
+    c.AddSecurityDefinition(jwtSecurityScheme.Reference.Id, jwtSecurityScheme);
+
+    c.AddSecurityRequirement(new OpenApiSecurityRequirement
+    {
+        { jwtSecurityScheme, Array.Empty<string>() }
+    });
+});
+
+builder.Services.AddStackExchangeRedisCache(options =>
+{
+    options.Configuration = builder.Configuration["Redis:Configuration"];
+    // appsettings.Development.json -> "Redis": { "Configuration": "localhost:6379" }
+    options.InstanceName = "WorldDeciding_";
+});
+
+// Uygulama içi cache abstraction
+builder.Services.AddScoped<IAppCache, RedisAppCache>();
 var app = builder.Build();
 
+// --- Middleware pipeline ---
 app.UseSerilogRequestLogging();
 app.UseForwardedHeaders();
 
@@ -102,9 +151,14 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
-// basit health
 app.MapGet("/health", () => new { ok = true });
 
-
+// --- Seed ---
+using (var scope = app.Services.CreateScope())
+{
+    var logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>()
+                                      .CreateLogger("Seed");
+    await app.Services.EnsureSeededAsync(logger);
+}
 
 app.Run();

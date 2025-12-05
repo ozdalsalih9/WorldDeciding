@@ -17,9 +17,14 @@ public class WorldDecidingDbContext
     public DbSet<Vote> Votes => Set<Vote>();
     public DbSet<Comment> Comments => Set<Comment>();
 
+    public DbSet<Category> Categories => Set<Category>(); // 👈 ekleyebilirsin
+
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+
+
 
         modelBuilder.Entity<Question>(b =>
         {
@@ -59,6 +64,8 @@ public class WorldDecidingDbContext
         modelBuilder.Entity<AppUser>(b =>
         {
             b.Property(u => u.CountryCode).HasMaxLength(2);
+            b.Property(u => u.BirthDate).HasColumnType("date"); // DateOnly için
+            b.Property(u => u.Gender).HasConversion<short>();   // enum → short
         });
 
         modelBuilder.Entity<Category>(b =>
