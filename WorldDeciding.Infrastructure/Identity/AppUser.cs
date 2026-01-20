@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Identity;
+using WorldDeciding.Application.Common.Models;
 
 namespace WorldDeciding.Infrastructure.Identity
 {
@@ -16,13 +17,5 @@ namespace WorldDeciding.Infrastructure.Identity
         public Gender Gender { get; set; } = Gender.Unknown;
     }
 
-    // Basit enum (ileride Domain'e taşınabilir)
-    public enum Gender : short
-    {
-        Unknown = 0,
-        Male = 1,
-        Female = 2,
-        Other = 3,
-        PreferNotToSay = 4
-    }
+
 }

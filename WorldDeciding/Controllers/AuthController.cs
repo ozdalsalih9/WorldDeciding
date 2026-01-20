@@ -5,10 +5,10 @@ using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
-using WorldDeciding.Infrastructure.Identity; // AppUser & Gender burada
-using WorldDeciding.Application.Common.Auth;
-
-
+using WorldDeciding.Application.Common.Models;
+// Gender artık Domain'de
+using WorldDeciding.Infrastructure.Identity;   // AppUser burada
+// using WorldDeciding.Application.Common.Auth; // kullanmıyorsan kaldır
 
 namespace WorldDeciding.Controllers;
 
@@ -49,15 +49,15 @@ public class AuthController : ControllerBase
 
     [HttpPost("register")]
     [AllowAnonymous]
-    public async Task<ActionResult<AuthRes>> Register([FromBody] RegisterRequest req)
+    public async Task<ActionResult<AuthRes>> Register([FromBody] RegisterReq req)
     {
-        // Basit kontroller (Identity de ek kontroller yapar)
         if (string.IsNullOrWhiteSpace(req.Email))
             return BadRequest(new { message = "Email is required." });
+
         if (string.IsNullOrWhiteSpace(req.Password) || req.Password.Length < 6)
             return BadRequest(new { message = "Password must be at least 6 characters." });
 
-        // 13+ yaş kuralı (opsiyonel ama önerilir)
+        // 13+ yaş kuralı
         if (req.BirthDate is DateOnly dob)
         {
             var today = DateOnly.FromDateTime(DateTime.UtcNow);
@@ -69,12 +69,10 @@ public class AuthController : ControllerBase
         if (req.Gender is short g && (g < 0 || g > 4))
             return BadRequest(new { message = "Invalid gender value." });
 
-        // Email tekilliği
         var exists = await _users.FindByEmailAsync(req.Email);
         if (exists is not null)
             return BadRequest(new { message = "Email is already in use." });
 
-        // Kullanıcı oluştur
         var user = new AppUser
         {
             Id = Guid.NewGuid(),
@@ -89,9 +87,6 @@ public class AuthController : ControllerBase
         if (!result.Succeeded)
             return BadRequest(new { errors = result.Errors });
 
-        // (İsteğe bağlı) Varsayılan rol ata: await _users.AddToRoleAsync(user, "User");
-
-        // Roller & token
         var roles = (await _users.GetRolesAsync(user)).ToArray();
         var token = await GenerateJwtAsync(user, roles);
 
@@ -128,7 +123,7 @@ public class AuthController : ControllerBase
 
     // ==== Helpers ====
 
-    private async Task<string> GenerateJwtAsync(AppUser user, string[] roles)
+    private Task<string> GenerateJwtAsync(AppUser user, string[] roles)
     {
         var jwt = _cfg.GetSection("Jwt");
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwt["Key"]!));
@@ -141,12 +136,11 @@ public class AuthController : ControllerBase
             new("country", user.CountryCode ?? string.Empty),
         };
 
-        // Opsiyonel demografi claim'leri (UI tarafında gösterim için işine yarayabilir)
         if (user.BirthDate is DateOnly dob)
             claims.Add(new Claim("birthdate", dob.ToString("yyyy-MM-dd")));
+
         claims.Add(new Claim("gender", ((short)user.Gender).ToString()));
 
-        // Role claim'leri
         foreach (var r in roles)
             claims.Add(new Claim(ClaimTypes.Role, r));
 
@@ -158,6 +152,6 @@ public class AuthController : ControllerBase
             signingCredentials: creds
         );
 
-        return new JwtSecurityTokenHandler().WriteToken(token);
+        return Task.FromResult(new JwtSecurityTokenHandler().WriteToken(token));
     }
 }

@@ -9,7 +9,6 @@ public class Question
     public QuestionType Type { get; set; } = QuestionType.Binary;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
-
     public Guid? CategoryId { get; set; }
     public List<Option> Options { get; set; } = new();
 }

@@ -90,7 +90,7 @@ builder.Services
 
 // --- FluentValidation (MVC otomatik) ---
 builder.Services.AddFluentValidationAutoValidation();
-
+builder.Services.AddScoped<IUserDemographicsReader, UserDemographicsReader>();
 // --- Swagger ---
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
@@ -131,6 +131,7 @@ builder.Services.AddStackExchangeRedisCache(options =>
     // appsettings.Development.json -> "Redis": { "Configuration": "localhost:6379" }
     options.InstanceName = "WorldDeciding_";
 });
+builder.Services.AddScoped<ILiveQuestionService, LiveQuestionService>();
 
 // Uygulama içi cache abstraction
 builder.Services.AddScoped<IAppCache, RedisAppCache>();
