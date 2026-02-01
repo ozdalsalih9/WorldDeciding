@@ -21,4 +21,7 @@ public class Vote
     public CountrySource CountrySource { get; set; }
     public string? CountryProvider { get; set; }   // "MaxMind" gibi
     public double? CountryConfidence { get; set; } // 0..1 (opsiyonel)
+    public DateOnly VoteDate { get; set; } // DateOnly.FromDateTime(UtcNow)
+    public string IpHash { get; set; } = default!;
+
 }

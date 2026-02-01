@@ -1,7 +1,8 @@
 ﻿using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using WorldDeciding.Application.Common.Interfaces;
+using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using WorldDeciding.Application.Votes.Commands.CastVote;
 
 namespace WorldDeciding.Controllers;
@@ -11,20 +12,43 @@ namespace WorldDeciding.Controllers;
 public class VotesController : ControllerBase
 {
     private readonly IMediator _mediator;
-    public VotesController(IMediator mediator) => _mediator = mediator;
+
+    public VotesController(IMediator mediator)
+    {
+        _mediator = mediator;
+    }
 
     [Authorize]
     [HttpPost]
-    public async Task<IActionResult> Cast(
-    CastVoteCommand command,
-    [FromServices] IAppCache cache)
+    public async Task<IActionResult> Cast([FromBody] CastVoteCommand command, CancellationToken ct)
     {
-        await _mediator.Send(command);
+        try
+        {
+            await _mediator.Send(command, ct);
+            return NoContent();
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return Unauthorized(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            var msg = ex.Message ?? "Invalid operation.";
 
-        // ilgili question stats cache'ini sil
-        var cacheKey = $"question:{command.QuestionId}:stats";
-        await cache.RemoveAsync(cacheKey);
+            if (msg.Contains("locked", StringComparison.OrdinalIgnoreCase) ||
+                msg.Contains("only within 10 minutes", StringComparison.OrdinalIgnoreCase) ||
+                msg.Contains("Daily vote limit", StringComparison.OrdinalIgnoreCase))
+            {
+                return Conflict(new { message = msg });
+            }
 
-        return NoContent();
+            return BadRequest(new { message = msg });
+        }
+
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException pg && pg.SqlState == "23505")
+        {
+            // DB unique violation - race condition vb.
+            return Conflict(new { message = "Daily vote limit reached for this question." });
+        }
     }
 }

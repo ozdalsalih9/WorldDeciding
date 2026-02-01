@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using WorldDeciding.Infrastructure.Persistence;
@@ -11,9 +12,11 @@ using WorldDeciding.Infrastructure.Persistence;
 namespace WorldDeciding.Infrastructure.Migrations
 {
     [DbContext(typeof(WorldDecidingDbContext))]
-    partial class WorldDecidingDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260122155724_QViewAndIPLimit")]
+    partial class QViewAndIPLimit
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -257,45 +260,6 @@ namespace WorldDeciding.Infrastructure.Migrations
                     b.HasIndex("CategoryId");
 
                     b.ToTable("Questions");
-                });
-
-            modelBuilder.Entity("WorldDeciding.Domain.Entities.RefreshToken", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("CreatedByIpHash")
-                        .HasColumnType("text");
-
-                    b.Property<DateTimeOffset>("ExpiresAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("FamilyId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("ReasonRevoked")
-                        .HasColumnType("text");
-
-                    b.Property<string>("ReplacedByTokenHash")
-                        .HasColumnType("text");
-
-                    b.Property<DateTimeOffset?>("RevokedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("TokenHash")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("RefreshTokens");
                 });
 
             modelBuilder.Entity("WorldDeciding.Domain.Entities.Vote", b =>

@@ -80,17 +80,18 @@ public class QuestionsController : ControllerBase
         {
             return Ok(cached);
         }
-
-        // 🔴 HATALI
-        // var result = await _mediator.Send(new GetQuestionStatsQuery { QuestionId = id });
-
-        // 🟢 DOĞRUSU
         var result = await _mediator.Send(new GetQuestionStatsQuery(id));
 
         await cache.SetAsync(cacheKey, result, TimeSpan.FromMinutes(1));
 
         return Ok(result);
     }
-
+    [HttpPost("{id:guid}/view")]
+    [AllowAnonymous]
+    public async Task<IActionResult> RecordView(Guid id, CancellationToken ct)
+    {
+        await _mediator.Send(new RecordQuestionViewCommand(id), ct);
+        return NoContent();
+    }
 
 }

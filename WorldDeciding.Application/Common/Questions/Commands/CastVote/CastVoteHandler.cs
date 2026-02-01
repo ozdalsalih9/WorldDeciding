@@ -14,17 +14,26 @@ public class CastVoteHandler : IRequestHandler<CastVoteCommand, Unit>
     private readonly IClientContext _client;
     private readonly IGeoIpResolver _geo;
     private readonly IHttpContextAccessor _http;
+    private readonly IIpHasher _ipHasher;
+    private readonly IAppCache _cache;
+
+    // ✅ Değiştirme penceresi
+    private static readonly TimeSpan ChangeWindow = TimeSpan.FromMinutes(10);
 
     public CastVoteHandler(
         IAppDbContext db,
         IClientContext client,
         IGeoIpResolver geo,
-        IHttpContextAccessor http)
+        IHttpContextAccessor http,
+        IIpHasher ipHasher,
+        IAppCache cache)
     {
         _db = db;
         _client = client;
         _geo = geo;
         _http = http;
+        _ipHasher = ipHasher;
+        _cache = cache;
     }
 
     public async Task<Unit> Handle(CastVoteCommand request, CancellationToken ct)
@@ -49,28 +58,29 @@ public class CastVoteHandler : IRequestHandler<CastVoteCommand, Unit>
         if (idClaim == null || !Guid.TryParse(idClaim.Value, out var userId))
             throw new UnauthorizedAccessException("Cannot resolve user id from token.");
 
-        // 🔹 BURASI ÖNEMLİ:
-        // 3) Beyan edilen ülke:
-        //    Önce JWT'deki "country" claim'ini kullan,
-        //    o boşsa X-Country header'ı (ClientContext.DeclaredCountryIso2) dene.
+        // 3) IP Hash
+        var ipRaw = _client.ClientIp?.ToString() ?? "unknown";
+        var ipHash = _ipHasher.Hash(ipRaw);
+
+        var utcNow = DateTime.UtcNow;
+        var today = DateOnly.FromDateTime(utcNow);
+
+        // 4) Ülke (declared / inferred)
         string? declared = principal.FindFirst("country")?.Value;
         if (string.IsNullOrWhiteSpace(declared))
             declared = _client.DeclaredCountryIso2;
-
         if (string.IsNullOrWhiteSpace(declared))
             declared = null;
 
-        // 4) IP'den çıkarılan ülke (GeoIP)
         string? inferred = null;
         double confidence = 0.0;
         string provider = "Unknown";
 
-        var ip = _client.ClientIp;
-        if (ip is not null)
+        if (_client.ClientIp is not null)
         {
             try
             {
-                var (iso2, conf, prov) = await _geo.ResolveAsync(ip, ct);
+                var (iso2, conf, prov) = await _geo.ResolveAsync(_client.ClientIp, ct);
                 inferred = iso2;
                 confidence = conf;
                 provider = prov;
@@ -83,44 +93,79 @@ public class CastVoteHandler : IRequestHandler<CastVoteCommand, Unit>
             }
         }
 
-        // 5) Son ülke ve kaynak tipi
         var finalCountry = declared ?? inferred;
         var source = declared is not null
             ? CountrySource.Declared
             : (inferred is not null ? CountrySource.Inferred : CountrySource.Unknown);
 
-        // 6) Aynı kullanıcı aynı soruya daha önce oy vermiş mi? (upsert)
-        var existingVote = await _db.Votes
-            .FirstOrDefaultAsync(v => v.UserId == userId && v.QuestionId == request.QuestionId, ct);
+        // 5) Aynı kullanıcı bu soruya bugün oy verdi mi?
+        var existing = await _db.Votes.FirstOrDefaultAsync(v =>
+            v.QuestionId == request.QuestionId &&
+            v.UserId == userId &&
+            v.VoteDate == today, ct);
 
-        if (existingVote is null)
+        if (existing is not null)
         {
-            var vote = new Vote
+            // ✅ 10 dakikalık değişiklik penceresi
+            var deadline = existing.CreatedAt.Add(ChangeWindow);
+            if (utcNow > deadline)
             {
-                Id = Guid.NewGuid(),
-                QuestionId = request.QuestionId,
-                OptionId = request.OptionId,
-                UserId = userId,
-                CountryCode = finalCountry,
-                CountrySource = source,
-                CountryProvider = provider,
-                CountryConfidence = confidence,
-                CreatedAt = DateTime.UtcNow
-            };
+                // 10 dk geçti -> değişiklik yok
+                throw new InvalidOperationException("Vote is locked. You can change your vote only within 10 minutes after voting.");
+            }
 
-            _db.Votes.Add(vote);
+            // 10 dk içindeyse update'e izin ver
+            existing.OptionId = request.OptionId;
+            existing.CountryCode = finalCountry;
+            existing.CountrySource = source;
+            existing.CountryProvider = provider;
+            existing.CountryConfidence = confidence;
+            existing.IpHash = ipHash;
+            existing.UpdatedAt = utcNow;
+
+            await _db.SaveChangesAsync(ct);
+
+            // stats cache invalidate
+            await _cache.RemoveAsync($"question:{request.QuestionId}:stats", ct);
+            await _cache.RemoveAsync($"question:{request.QuestionId}:stats:v2", ct);
+
+            return Unit.Value;
         }
-        else
+
+        // 6) Kullanıcı bugün oy vermemiş => IP kontrolü (başka hesaplarla abuse engeli)
+        var ipVotedToday = await _db.Votes.AnyAsync(v =>
+            v.QuestionId == request.QuestionId &&
+            v.VoteDate == today &&
+            v.IpHash == ipHash, ct);
+
+        if (ipVotedToday)
+            throw new InvalidOperationException("Daily vote limit reached for this IP on this question.");
+
+        // 7) Yeni vote oluştur
+        var vote = new Vote
         {
-            existingVote.OptionId = request.OptionId;
-            existingVote.CountryCode = finalCountry;
-            existingVote.CountrySource = source;
-            existingVote.CountryProvider = provider;
-            existingVote.CountryConfidence = confidence;
-            existingVote.UpdatedAt = DateTime.UtcNow;
-        }
+            Id = Guid.NewGuid(),
+            QuestionId = request.QuestionId,
+            OptionId = request.OptionId,
+            UserId = userId,
 
+            VoteDate = today,
+            IpHash = ipHash,
+
+            CountryCode = finalCountry,
+            CountrySource = source,
+            CountryProvider = provider,
+            CountryConfidence = confidence,
+
+            CreatedAt = utcNow
+        };
+
+        _db.Votes.Add(vote);
         await _db.SaveChangesAsync(ct);
+
+        await _cache.RemoveAsync($"question:{request.QuestionId}:stats", ct);
+        await _cache.RemoveAsync($"question:{request.QuestionId}:stats:v2", ct);
+
         return Unit.Value;
     }
 }
