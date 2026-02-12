@@ -12,7 +12,9 @@ using WorldDeciding.Application.Common.Auth.Models;                  // AuthToke
 using WorldDeciding.Application.Common.Interfaces;
 using WorldDeciding.Application.Common.Models;
 using WorldDeciding.Domain.Entities;                          // RefreshToken entity
-using WorldDeciding.Infrastructure.Identity;
+using WorldDeciding.Domain.Identity;
+
+
 
 namespace WorldDeciding.Controllers;
 
@@ -28,6 +30,7 @@ public class AuthController : ControllerBase
     private readonly IRefreshTokenService _refreshTokens;
     private readonly IClientContext _client;
     private readonly IIpHasher _ipHasher;
+    private readonly IAbuseDetector _abuse;
 
     public AuthController(
         UserManager<AppUser> users,
@@ -36,7 +39,8 @@ public class AuthController : ControllerBase
         IAppDbContext db,
         IRefreshTokenService refreshTokens,
         IClientContext client,
-        IIpHasher ipHasher)
+        IIpHasher ipHasher,
+        IAbuseDetector abuse)
     {
         _users = users;
         _cfg = cfg;
@@ -45,6 +49,7 @@ public class AuthController : ControllerBase
         _refreshTokens = refreshTokens;
         _client = client;
         _ipHasher = ipHasher;
+        _abuse = abuse;
     }
 
     // ==== DTOs ====
@@ -72,6 +77,8 @@ public class AuthController : ControllerBase
     public record ConfirmEmailReq(string UserId, string Token);
     public record ForgotPasswordReq(string Email);
     public record ResetPasswordReq(string Email, string Token, string NewPassword, string ConfirmNewPassword);
+    public record ResendConfirmationReq(string Email);
+
 
     // ==== Endpoints ====
 
@@ -138,40 +145,62 @@ public class AuthController : ControllerBase
         return Ok(new { message = "Registration successful. Please check your email to confirm your account." });
     }
 
-    [HttpPost("confirm-email")]
+    [HttpGet("confirm-email")]
     [AllowAnonymous]
-    public async Task<IActionResult> ConfirmEmail([FromBody] ConfirmEmailReq req)
+    public async Task<IActionResult> ConfirmEmailGet(
+    [FromQuery] string userId,
+    [FromQuery] string token,
+    CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(req.UserId) || string.IsNullOrWhiteSpace(req.Token))
-            return BadRequest(new { message = "Missing userId or token." });
+        var feBase = (_cfg["Frontend:BaseUrl"] ?? "http://localhost:5173").TrimEnd('/');
 
-        var user = await _users.FindByIdAsync(req.UserId);
-        if (user is null)
-            return BadRequest(new { message = "Invalid user." });
+        string FrontendUrl(string status, string message)
+            => $"{feBase}/email-confirmed?status={Uri.EscapeDataString(status)}&message={Uri.EscapeDataString(message)}";
 
-        string decodedToken;
         try
         {
-            decodedToken = Encoding.UTF8.GetString(WebEncoders.Base64UrlDecode(req.Token));
+            if (string.IsNullOrWhiteSpace(userId) || string.IsNullOrWhiteSpace(token))
+                return Redirect(FrontendUrl("error", "Missing userId or token."));
+
+            var user = await _users.FindByIdAsync(userId);
+            if (user is null)
+                return Redirect(FrontendUrl("error", "Invalid user."));
+
+            string decodedToken;
+            try
+            {
+                decodedToken = Encoding.UTF8.GetString(WebEncoders.Base64UrlDecode(token));
+            }
+            catch
+            {
+                return Redirect(FrontendUrl("error", "Invalid token format."));
+            }
+
+            var result = await _users.ConfirmEmailAsync(user, decodedToken);
+
+            if (!result.Succeeded)
+            {
+                var errs = string.Join(" | ", result.Errors.Select(e => $"{e.Code}:{e.Description}"));
+                return Redirect(FrontendUrl("error", $"Confirm failed: {errs}"));
+            }
+
+            return Redirect(FrontendUrl("success", "Email confirmed. You can now sign in."));
         }
         catch
         {
-            return BadRequest(new { message = "Invalid token format." });
+            return Redirect(FrontendUrl("error", "Server error during email confirmation."));
         }
-
-        var result = await _users.ConfirmEmailAsync(user, decodedToken);
-        if (!result.Succeeded)
-            return BadRequest(new { message = "Invalid or expired token.", errors = result.Errors });
-
-        return Ok(new { message = "Email confirmed." });
     }
+
+
 
     [HttpPost("forgot-password")]
     [AllowAnonymous]
     public async Task<IActionResult> ForgotPassword(
         [FromBody] ForgotPasswordReq req,
         [FromServices] IEmailSender emailSender,
-        [FromServices] IConfiguration cfg)
+        [FromServices] IConfiguration cfg,
+        CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(req.Email))
             return BadRequest(new { message = "Email is required." });
@@ -180,6 +209,22 @@ public class AuthController : ControllerBase
 
         if (user is null || !user.EmailConfirmed)
             return Ok(new { message = "If the email exists, a reset token has been sent." });
+
+        var ip = _client.ClientIp?.ToString() ?? "unknown";
+        var ipHash = _ipHasher.Hash(ip);
+
+        var decision = await _abuse.CheckAsync(
+            WorldDeciding.Application.Common.Abuse.AbuseAction.ForgotPassword,
+            userId: null,
+            ipHash: ipHash,
+            ct);
+
+        if (decision.Mode == WorldDeciding.Application.Common.Abuse.AbuseMode.Throttle)
+        {
+            // Enumeration bozma: yine 200 dön, ama mail gönderme.
+            return Ok(new { message = "If the email exists, a reset token has been sent." });
+        }
+
 
         var token = await _users.GeneratePasswordResetTokenAsync(user);
         var encodedToken = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(token));
@@ -208,11 +253,34 @@ public class AuthController : ControllerBase
     [AllowAnonymous]
     public async Task<ActionResult<AuthRes>> Login([FromBody] LoginReq req, CancellationToken ct)
     {
+        // IP hash (privacy-safe)
+        var ip = _client.ClientIp?.ToString() ?? "unknown";
+        var ipHash = _ipHasher.Hash(ip);
+
+        // 1) Throttle check (IP bazlı)
+        var loginDecision = await _abuse.CheckAsync(
+            WorldDeciding.Application.Common.Abuse.AbuseAction.LoginAttempt,
+            userId: null,
+            ipHash: ipHash,
+            ct: ct);
+
+        if (loginDecision.Mode == WorldDeciding.Application.Common.Abuse.AbuseMode.Throttle)
+        {
+            Response.Headers["Retry-After"] = (loginDecision.RetryAfterSeconds ?? 60).ToString();
+            return StatusCode(StatusCodes.Status429TooManyRequests,
+                new { message = "Too many login attempts. Please try again later." });
+        }
+
         var user = await _users.FindByEmailAsync(req.Email);
 
+        // 2) Invalid credentials → failure sayacı artır (enumeration bozma)
         if (user is null || !await _users.CheckPasswordAsync(user, req.Password))
+        {
+            await _abuse.MarkLoginFailureAsync(ipHash, ct);
             return Unauthorized(new { message = "Invalid email or password." });
+        }
 
+        // 3) Email confirmed
         if (!user.EmailConfirmed)
             return Unauthorized(new { message = "Please confirm your email first." });
 
@@ -227,11 +295,7 @@ public class AuthController : ControllerBase
         var refreshHash = _refreshTokens.HashToken(refreshPlain);
         var familyId = Guid.NewGuid();
 
-        string? ipHash = null;
-        if (_client.ClientIp is not null)
-            ipHash = _ipHasher.Hash(_client.ClientIp.ToString());
-
-        // Refresh token expiry (config’ten istersen çek; şimdilik 14 gün)
+        // refresh token'a ipHash bağla (opsiyonel)
         var refreshEntity = new RefreshToken(
             userId: user.Id,
             tokenHash: refreshHash,
@@ -253,6 +317,56 @@ public class AuthController : ControllerBase
             (short)user.Gender,
             roles
         ));
+    }
+
+    [HttpPost("resend-confirmation")]
+    public async Task<IActionResult> ResendConfirmation(
+    [FromBody] ResendConfirmationReq req,
+    [FromServices] IEmailSender emailSender,
+    [FromServices] IConfiguration cfg,
+    CancellationToken ct)
+    {
+        // Enumeration-safe: her durumda 204 döneceğiz
+        var email = (req.Email ?? "").Trim().ToLowerInvariant();
+        if (string.IsNullOrWhiteSpace(email))
+            return NoContent();
+
+        var user = await _users.FindByEmailAsync(email);
+        if (user == null)
+            return NoContent();
+
+        if (user.EmailConfirmed)
+            return NoContent();
+
+        var token = await _users.GenerateEmailConfirmationTokenAsync(user);
+
+        // URL-safe token
+        var encodedToken = WebEncoders.Base64UrlEncode(System.Text.Encoding.UTF8.GetBytes(token));
+
+        // Frontend confirm URL (configten al)
+        // appsettings: Frontend:BaseUrl = "http://localhost:5173"
+        var apiBase = cfg["Api:BaseUrl"] ?? "https://localhost:7200";
+        var link = $"{apiBase.TrimEnd('/')}/api/auth/confirm-email?userId={user.Id}&token={encodedToken}";
+
+
+        var subject = "Confirm your email";
+        var html = $@"
+<p>Confirm your email by clicking the link below:</p>
+<p><a href=""{link}"">Confirm Email</a></p>
+<p>If you didn't request this, you can ignore this email.</p>
+";
+
+        try
+        {
+            await emailSender.SendAsync(email, subject, html, ct);
+        }
+        catch
+        {
+            // Dev ortamında SMTP patlıyorsa bile enumeration-safe davran.
+            // İstersen log bas (Serilog) ama client'a hata verme.
+        }
+
+        return NoContent();
     }
 
     public sealed record RefreshRequest(string RefreshToken);

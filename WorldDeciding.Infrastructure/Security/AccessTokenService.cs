@@ -5,7 +5,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
 using WorldDeciding.Application.Common.Interfaces;
-using WorldDeciding.Infrastructure.Identity;
+using WorldDeciding.Domain.Identity;
 
 namespace WorldDeciding.Infrastructure.Security;
 

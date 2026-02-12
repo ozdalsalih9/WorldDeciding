@@ -1,3 +1,5 @@
 ﻿using MediatR;
 
-public record RecordQuestionViewCommand(Guid QuestionId) : IRequest;
+namespace WorldDeciding.Application.Questions.Commands.RecordQuestionView;
+
+public sealed record RecordQuestionViewCommand(Guid QuestionId) : IRequest;

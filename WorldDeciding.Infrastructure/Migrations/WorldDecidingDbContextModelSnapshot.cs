@@ -22,6 +22,26 @@ namespace WorldDeciding.Infrastructure.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("CommentLike", b =>
+                {
+                    b.Property<Guid>("CommentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("CommentId", "UserId");
+
+                    b.HasIndex("CommentId");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("CommentLikes");
+                });
+
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<System.Guid>", b =>
                 {
                     b.Property<int>("Id")
@@ -192,20 +212,28 @@ namespace WorldDeciding.Infrastructure.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int>("LikeCount")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("ParentId")
+                        .HasColumnType("uuid");
+
                     b.Property<Guid>("QuestionId")
                         .HasColumnType("uuid");
 
                     b.Property<string>("Text")
                         .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
 
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("QuestionId");
+                    b.HasIndex("ParentId", "CreatedAt");
+
+                    b.HasIndex("QuestionId", "ParentId", "LikeCount", "CreatedAt");
 
                     b.ToTable("Comments");
                 });
@@ -257,6 +285,29 @@ namespace WorldDeciding.Infrastructure.Migrations
                     b.HasIndex("CategoryId");
 
                     b.ToTable("Questions");
+                });
+
+            modelBuilder.Entity("WorldDeciding.Domain.Entities.QuestionStatsDaily", b =>
+                {
+                    b.Property<Guid>("QuestionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("QuestionId");
+
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("date")
+                        .HasColumnName("Date");
+
+                    b.Property<long>("Views")
+                        .HasColumnType("bigint")
+                        .HasColumnName("Views");
+
+                    b.Property<long>("Votes")
+                        .HasColumnType("bigint")
+                        .HasColumnName("Votes");
+
+                    b.HasKey("QuestionId", "Date");
+
+                    b.ToTable("QuestionStatsDaily", (string)null);
                 });
 
             modelBuilder.Entity("WorldDeciding.Domain.Entities.RefreshToken", b =>
@@ -354,7 +405,7 @@ namespace WorldDeciding.Infrastructure.Migrations
                     b.ToTable("Votes");
                 });
 
-            modelBuilder.Entity("WorldDeciding.Infrastructure.Identity.AppRole", b =>
+            modelBuilder.Entity("WorldDeciding.Domain.Identity.AppRole", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -381,7 +432,7 @@ namespace WorldDeciding.Infrastructure.Migrations
                     b.ToTable("AspNetRoles", (string)null);
                 });
 
-            modelBuilder.Entity("WorldDeciding.Infrastructure.Identity.AppUser", b =>
+            modelBuilder.Entity("WorldDeciding.Domain.Identity.AppUser", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -389,6 +440,14 @@ namespace WorldDeciding.Infrastructure.Migrations
 
                     b.Property<int>("AccessFailedCount")
                         .HasColumnType("integer");
+
+                    b.Property<string>("AvatarUrl")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("Bio")
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)");
 
                     b.Property<DateOnly?>("BirthDate")
                         .HasColumnType("date");
@@ -403,6 +462,10 @@ namespace WorldDeciding.Infrastructure.Migrations
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DisplayName")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
 
                     b.Property<string>("Email")
                         .HasMaxLength(256)
@@ -459,9 +522,31 @@ namespace WorldDeciding.Infrastructure.Migrations
                     b.ToTable("AspNetUsers", (string)null);
                 });
 
+            modelBuilder.Entity("WorldDeciding.Infrastructure.Persistence.Projections.LeaderboardRow", b =>
+                {
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("QuestionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("QuestionType")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<long>("Score")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Text")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.ToTable("LeaderboardRows");
+                });
+
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<System.Guid>", b =>
                 {
-                    b.HasOne("WorldDeciding.Infrastructure.Identity.AppRole", null)
+                    b.HasOne("WorldDeciding.Domain.Identity.AppRole", null)
                         .WithMany()
                         .HasForeignKey("RoleId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -470,7 +555,7 @@ namespace WorldDeciding.Infrastructure.Migrations
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserClaim<System.Guid>", b =>
                 {
-                    b.HasOne("WorldDeciding.Infrastructure.Identity.AppUser", null)
+                    b.HasOne("WorldDeciding.Domain.Identity.AppUser", null)
                         .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -479,7 +564,7 @@ namespace WorldDeciding.Infrastructure.Migrations
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserLogin<System.Guid>", b =>
                 {
-                    b.HasOne("WorldDeciding.Infrastructure.Identity.AppUser", null)
+                    b.HasOne("WorldDeciding.Domain.Identity.AppUser", null)
                         .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -488,13 +573,13 @@ namespace WorldDeciding.Infrastructure.Migrations
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserRole<System.Guid>", b =>
                 {
-                    b.HasOne("WorldDeciding.Infrastructure.Identity.AppRole", null)
+                    b.HasOne("WorldDeciding.Domain.Identity.AppRole", null)
                         .WithMany()
                         .HasForeignKey("RoleId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("WorldDeciding.Infrastructure.Identity.AppUser", null)
+                    b.HasOne("WorldDeciding.Domain.Identity.AppUser", null)
                         .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -503,11 +588,19 @@ namespace WorldDeciding.Infrastructure.Migrations
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserToken<System.Guid>", b =>
                 {
-                    b.HasOne("WorldDeciding.Infrastructure.Identity.AppUser", null)
+                    b.HasOne("WorldDeciding.Domain.Identity.AppUser", null)
                         .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("WorldDeciding.Domain.Entities.Comment", b =>
+                {
+                    b.HasOne("WorldDeciding.Domain.Entities.Comment", null)
+                        .WithMany()
+                        .HasForeignKey("ParentId")
+                        .OnDelete(DeleteBehavior.Cascade);
                 });
 
             modelBuilder.Entity("WorldDeciding.Domain.Entities.Option", b =>
@@ -525,6 +618,17 @@ namespace WorldDeciding.Infrastructure.Migrations
                         .WithMany()
                         .HasForeignKey("CategoryId")
                         .OnDelete(DeleteBehavior.SetNull);
+                });
+
+            modelBuilder.Entity("WorldDeciding.Domain.Entities.QuestionStatsDaily", b =>
+                {
+                    b.HasOne("WorldDeciding.Domain.Entities.Question", "Question")
+                        .WithMany()
+                        .HasForeignKey("QuestionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Question");
                 });
 
             modelBuilder.Entity("WorldDeciding.Domain.Entities.Question", b =>

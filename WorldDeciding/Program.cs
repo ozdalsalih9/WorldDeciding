@@ -8,22 +8,31 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using Serilog;
+using StackExchange.Redis;
 using System.Text;
-using WorldDeciding.Application;                        // ApplicationAssemblyMarker
+
+using WorldDeciding.Application;
 using WorldDeciding.Application.Common.Interfaces;
+
 using WorldDeciding.Infrastructure.Email;
 using WorldDeciding.Infrastructure.Geo;
-using WorldDeciding.Infrastructure.Identity;
+using WorldDeciding.Domain.Identity;
 using WorldDeciding.Infrastructure.Persistence;
 using WorldDeciding.Infrastructure.Security;
 using WorldDeciding.Infrastructure.Services;
+
 using WorldDeciding.Services;
+using WorldDeciding.Infrastructure.Identity; // RateLimitExceptionMiddleware burada
 
 var builder = WebApplication.CreateBuilder(args);
 
+// ---- DEBUG (geçici) ----
+Console.WriteLine("ENV=" + builder.Environment.EnvironmentName);
+Console.WriteLine("ContentRoot=" + builder.Environment.ContentRootPath);
+Console.WriteLine("Redis:Configuration=" + builder.Configuration.GetSection("Redis").GetValue<string>("Configuration"));
+
 var pepper = builder.Configuration["RefreshToken:Pepper"];
 Console.WriteLine($"[CONFIG] RefreshToken:Pepper loaded? {(string.IsNullOrWhiteSpace(pepper) ? "NO" : "YES")}");
-
 
 // --- Logging ---
 builder.Host.UseSerilog((ctx, lc) => lc
@@ -34,32 +43,32 @@ builder.Host.UseSerilog((ctx, lc) => lc
 builder.Services.AddDbContext<WorldDecidingDbContext>(opt =>
     opt.UseNpgsql(builder.Configuration.GetConnectionString("Default")));
 
+//redis counter
+builder.Services.AddScoped<IRedisCounter, RedisCounter>();
+builder.Services.AddScoped<IRateCounter, RedisRateCounter>();
+
+
 // IAppDbContext -> DbContext
 builder.Services.AddScoped<IAppDbContext>(sp => sp.GetRequiredService<WorldDecidingDbContext>());
 
 // --- HttpContext ---
 builder.Services.AddHttpContextAccessor();
 
-// --- Identity (TEK SEFER, Token Providers DAHİL) ---
+// --- Identity (TEK SEFER) ---
 builder.Services.AddIdentityCore<AppUser>(opt =>
 {
-    // Password policy
     opt.Password.RequiredLength = 10;
     opt.Password.RequireDigit = true;
     opt.Password.RequireUppercase = true;
     opt.Password.RequireLowercase = true;
     opt.Password.RequireNonAlphanumeric = true;
 
-    // Lockout
     opt.Lockout.MaxFailedAccessAttempts = 5;
     opt.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(10);
-
-    // (Opsiyonel) email confirmed zorunlu yapacaksan:
-    // opt.SignIn.RequireConfirmedEmail = true;  // SignInManager kullanıyorsan anlamlı
 })
 .AddRoles<AppRole>()
 .AddEntityFrameworkStores<WorldDecidingDbContext>()
-.AddDefaultTokenProviders(); // ✅ Email confirmation / reset password için şart
+.AddDefaultTokenProviders();
 
 // --- Authentication / JWT ---
 var jwt = builder.Configuration.GetSection("Jwt");
@@ -81,16 +90,81 @@ builder.Services
         };
     });
 
+// --- Forwarded headers (proxy arkasında IP doğru gelsin) ---
+builder.Services.Configure<ForwardedHeadersOptions>(opts =>
+{
+    opts.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+
+    // İstersen trusted proxy whitelist:
+    // var proxies = builder.Configuration.GetSection("Networking:TrustedProxies").Get<string[]>() ?? Array.Empty<string>();
+    // foreach (var p in proxies) opts.KnownProxies.Add(System.Net.IPAddress.Parse(p));
+});
+
+// -------------------------
+// REDIS (tek kaynaktan)
+// -------------------------
+var redisCfg = builder.Configuration.GetSection("Redis").GetValue<string>("Configuration");
+if (string.IsNullOrWhiteSpace(redisCfg))
+{
+    var env = builder.Environment.EnvironmentName;
+    var root = builder.Environment.ContentRootPath;
+    throw new InvalidOperationException($"Redis:Configuration missing. ENV={env} ContentRoot={root}. Check appsettings.{env}.json in startup project.");
+}
+
+// 1) Multiplexer (abuse için)
+builder.Services.AddSingleton<IConnectionMultiplexer>(_ =>
+{
+    var opts = ConfigurationOptions.Parse(redisCfg);
+    opts.AbortOnConnectFail = false;
+    opts.ConnectRetry = 5;
+    opts.ConnectTimeout = 5000;
+    return ConnectionMultiplexer.Connect(opts);
+});
+
+// 2) IDistributedCache (live question cache için)
+builder.Services.AddStackExchangeRedisCache(options =>
+{
+    options.Configuration = redisCfg;
+    options.InstanceName = builder.Configuration.GetSection("Redis").GetValue<string>("InstanceName") ?? "WorldDeciding_";
+});
+
+// 3) AppCache abstraction
+builder.Services.AddScoped<IAppCache, RedisAppCache>();
+
+// --- Abuse services ---
+builder.Services.AddScoped<IAbuseStore, RedisAbuseStore>();
+builder.Services.AddScoped<IAbuseDetector, AbuseDetector>();
+builder.Services.AddTransient<RateLimitExceptionMiddleware>();
+
 // --- App services ---
 builder.Services.AddSingleton<IGeoIpResolver, Ip2LocationGeoIpResolver>();
+
+// ⚠️ ClientContext implementation Infrastructure'da olmalı. API'deki ClientContext'i SİL.
 builder.Services.AddScoped<IClientContext, ClientContext>();
+
 builder.Services.AddScoped<IUserDemographicsReader, UserDemographicsReader>();
 builder.Services.AddScoped<IIpHasher, IpHasher>();
 builder.Services.AddScoped<ILiveQuestionService, LiveQuestionService>();
 
+//LeaderBoard
+builder.Services.AddScoped<IQuestionStatsWriter, QuestionStatsWriter>();
+builder.Services.AddScoped<ILeaderboardReader, WorldDeciding.Infrastructure.Persistence.LeaderboardReader>();
+
+// Current User
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<ICurrentUser, CurrentUser>();
+
+
 // --- Email (SMTP) ---
 builder.Services.Configure<SmtpOptions>(builder.Configuration.GetSection("Smtp"));
 builder.Services.AddScoped<IEmailSender, SmtpEmailSender>();
+
+// --- Security services ---
+builder.Services.AddScoped<IAccessTokenService, AccessTokenService>();
+
+builder.Services.Configure<RefreshTokenService.Options>(
+    builder.Configuration.GetSection("RefreshToken"));
+builder.Services.AddScoped<IRefreshTokenService, RefreshTokenService>();
 
 // --- CORS ---
 builder.Services.AddCors(o => o.AddPolicy("frontend", p => p
@@ -99,56 +173,22 @@ builder.Services.AddCors(o => o.AddPolicy("frontend", p => p
     .AllowAnyMethod()
     .AllowCredentials()));
 
-// --- Forwarded headers (opsiyonel) ---
-builder.Services.Configure<ForwardedHeadersOptions>(opts =>
-{
-    opts.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
-});
-
 // --- MediatR / Validators / AutoMapper ---
 builder.Services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(ApplicationAssemblyMarker).Assembly));
 builder.Services.AddValidatorsFromAssembly(typeof(ApplicationAssemblyMarker).Assembly);
 builder.Services.AddAutoMapper(typeof(ApplicationAssemblyMarker).Assembly);
 
-// --- Security services ---
-// --- Security services ---
-builder.Services.AddScoped<IAccessTokenService, AccessTokenService>();
-
-builder.Services.Configure<RefreshTokenService.Options>(
-    builder.Configuration.GetSection("RefreshToken"));
-builder.Services.AddScoped<IRefreshTokenService, RefreshTokenService>();
-
-
-// --- Controllers + JSON options ---
+// --- Controllers ---
 builder.Services.AddControllers()
-    .AddJsonOptions(o =>
-    {
-        // .NET 8'de DateOnly native; ekstra converter gerekmez.
-        // .NET 7 ise burada DateOnly converter ekleyebilirsin.
-    });
+    .AddJsonOptions(_ => { });
 
-// --- FluentValidation (MVC otomatik) ---
 builder.Services.AddFluentValidationAutoValidation();
-
-// --- Redis Cache ---
-builder.Services.AddStackExchangeRedisCache(options =>
-{
-    options.Configuration = builder.Configuration["Redis:Configuration"];
-    options.InstanceName = "WorldDeciding_";
-});
-
-// Uygulama içi cache abstraction
-builder.Services.AddScoped<IAppCache, RedisAppCache>();
 
 // --- Swagger ---
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
-    c.SwaggerDoc("v1", new OpenApiInfo
-    {
-        Title = "WorldDeciding API",
-        Version = "v1"
-    });
+    c.SwaggerDoc("v1", new OpenApiInfo { Title = "WorldDeciding API", Version = "v1" });
 
     var jwtSecurityScheme = new OpenApiSecurityScheme
     {
@@ -176,7 +216,12 @@ var app = builder.Build();
 
 // --- Middleware pipeline ---
 app.UseSerilogRequestLogging();
+
+// Proxy header'ları auth öncesi okumalı
 app.UseForwardedHeaders();
+
+// 429 middleware (Controllers'tan önce)
+app.UseMiddleware<RateLimitExceptionMiddleware>();
 
 if (app.Environment.IsDevelopment())
 {
@@ -198,6 +243,5 @@ using (var scope = app.Services.CreateScope())
                                       .CreateLogger("Seed");
     await scope.ServiceProvider.EnsureSeededAsync(logger);
 }
-
 
 app.Run();

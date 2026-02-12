@@ -8,7 +8,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using WorldDeciding.Domain.Entities;
-using WorldDeciding.Infrastructure.Identity;
+using WorldDeciding.Domain.Identity;
 
 namespace WorldDeciding.Infrastructure.Persistence;
 

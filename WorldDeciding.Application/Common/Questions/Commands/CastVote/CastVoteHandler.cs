@@ -3,6 +3,8 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using WorldDeciding.Application.Common.Abuse;
+using WorldDeciding.Application.Common.Exceptions;
 using WorldDeciding.Application.Common.Interfaces;
 using WorldDeciding.Domain.Entities;
 
@@ -16,6 +18,9 @@ public class CastVoteHandler : IRequestHandler<CastVoteCommand, Unit>
     private readonly IHttpContextAccessor _http;
     private readonly IIpHasher _ipHasher;
     private readonly IAppCache _cache;
+    private readonly IAbuseDetector _abuse;
+    private readonly IQuestionStatsWriter _statsWriter;
+
 
     // ✅ Değiştirme penceresi
     private static readonly TimeSpan ChangeWindow = TimeSpan.FromMinutes(10);
@@ -26,7 +31,9 @@ public class CastVoteHandler : IRequestHandler<CastVoteCommand, Unit>
         IGeoIpResolver geo,
         IHttpContextAccessor http,
         IIpHasher ipHasher,
-        IAppCache cache)
+        IAppCache cache,
+        IAbuseDetector abuse,
+        IQuestionStatsWriter statsWriter)
     {
         _db = db;
         _client = client;
@@ -34,6 +41,8 @@ public class CastVoteHandler : IRequestHandler<CastVoteCommand, Unit>
         _http = http;
         _ipHasher = ipHasher;
         _cache = cache;
+        _abuse = abuse;
+        _statsWriter = statsWriter;
     }
 
     public async Task<Unit> Handle(CastVoteCommand request, CancellationToken ct)
@@ -42,8 +51,14 @@ public class CastVoteHandler : IRequestHandler<CastVoteCommand, Unit>
         var exists = await _db.Options
             .AnyAsync(o => o.Id == request.OptionId && o.QuestionId == request.QuestionId, ct);
 
+        var questionId = request.QuestionId;
+
         if (!exists)
             throw new InvalidOperationException("Option/Question mismatch.");
+
+        var utcDate = DateOnly.FromDateTime(DateTime.UtcNow);
+        await _statsWriter.IncrementVotesAsync(questionId, utcDate, ct);
+
 
         // 2) Kullanıcı bilgisi (JWT)
         var httpContext = _http.HttpContext;
@@ -140,6 +155,17 @@ public class CastVoteHandler : IRequestHandler<CastVoteCommand, Unit>
 
         if (ipVotedToday)
             throw new InvalidOperationException("Daily vote limit reached for this IP on this question.");
+
+        var ip = _client.ClientIp?.ToString() ?? "unknown";
+
+        var decision = await _abuse.CheckAsync(
+            AbuseAction.VoteAttempt,
+            userId: userId.ToString(),
+            ipHash: ipHash,
+            ct);
+
+        if (decision.Mode == AbuseMode.Throttle)
+            throw new TooManyRequestsException("Too many vote attempts. Slow down.", decision.RetryAfterSeconds ?? 30);
 
         // 7) Yeni vote oluştur
         var vote = new Vote

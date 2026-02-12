@@ -2,12 +2,15 @@
 using Microsoft.EntityFrameworkCore;
 using WorldDeciding.Application.Common.Interfaces;
 using WorldDeciding.Domain.Entities;
-using WorldDeciding.Infrastructure.Identity;
+using WorldDeciding.Infrastructure.Persistence.Configurations;
+using WorldDeciding.Infrastructure.Persistence.Projections;
+using WorldDeciding.Domain.Identity;
 
 namespace WorldDeciding.Infrastructure.Persistence;
 
 public class WorldDecidingDbContext
     : IdentityDbContext<AppUser, AppRole, Guid>, IAppDbContext
+
 {
     public WorldDecidingDbContext(DbContextOptions<WorldDecidingDbContext> options)
         : base(options) { }
@@ -18,6 +21,12 @@ public class WorldDecidingDbContext
     public DbSet<Comment> Comments => Set<Comment>();
     public DbSet<Category> Categories => Set<Category>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+    public DbSet<QuestionStatsDaily> QuestionStatsDaily => Set<QuestionStatsDaily>();
+    public DbSet<LeaderboardRow> LeaderboardRows => Set<LeaderboardRow>();
+    public DbSet<CommentLike> CommentLikes => Set<CommentLike>();
+
+
+
 
 
     // ✅ EKLE: QuestionView DbSet
@@ -26,6 +35,16 @@ public class WorldDecidingDbContext
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+
+        modelBuilder.ApplyConfiguration(new QuestionStatsDailyConfiguration());
+
+        modelBuilder.Entity<LeaderboardRow>().HasNoKey();
+        modelBuilder.Entity<CommentLike>(b =>
+        {
+            b.HasKey(x => new { x.CommentId, x.UserId });
+            b.HasIndex(x => x.CommentId);
+            b.HasIndex(x => x.UserId);
+        });
 
         modelBuilder.Entity<Question>(b =>
         {
@@ -84,15 +103,28 @@ public class WorldDecidingDbContext
         modelBuilder.Entity<Comment>(b =>
         {
             b.HasKey(x => x.Id);
-            b.Property(x => x.Text).IsRequired().HasMaxLength(500);
-            b.HasIndex(x => x.QuestionId);
+
+            b.Property(x => x.Text).IsRequired().HasMaxLength(2000);
+            b.Property(x => x.LikeCount).IsRequired();
+
+            b.HasIndex(x => new { x.QuestionId, x.ParentId, x.LikeCount, x.CreatedAt });
+            b.HasIndex(x => new { x.ParentId, x.CreatedAt });
+
+            b.HasOne<Comment>()
+             .WithMany()
+             .HasForeignKey(x => x.ParentId)
+             .OnDelete(DeleteBehavior.Cascade);
         });
+
 
         modelBuilder.Entity<AppUser>(b =>
         {
             b.Property(u => u.CountryCode).HasMaxLength(2);
             b.Property(u => u.BirthDate).HasColumnType("date"); // DateOnly için
             b.Property(u => u.Gender).HasConversion<short>();   // enum → short
+            b.Property(u => u.DisplayName).HasMaxLength(40);
+            b.Property(u => u.Bio).HasMaxLength(160);
+            b.Property(u => u.AvatarUrl).HasMaxLength(300);
         });
 
         modelBuilder.Entity<Category>(b =>
