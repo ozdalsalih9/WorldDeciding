@@ -6,6 +6,7 @@ using WorldDeciding.Application.Common.Categories.Commands.DeleteCategory;
 using WorldDeciding.Application.Common.Categories.Commands.UpdateCategory;
 using WorldDeciding.Application.Common.Categories.Dtos;
 using WorldDeciding.Application.Common.Categories.Queries;
+using WorldDeciding.Application.Questions.Dtos;
 
 namespace WorldDeciding.Api.Controllers;
 
@@ -54,5 +55,12 @@ public class CategoriesController : ControllerBase
     {
         var ok = await _mediator.Send(new DeleteCategoryCommand(id));
         return ok ? NoContent() : NotFound();
+    }
+    [AllowAnonymous]
+    [HttpGet("{id:guid}/questions")]
+    public async Task<ActionResult<IReadOnlyList<QuestionDto>>> GetQuestions(Guid id)
+    {
+        var items = await _mediator.Send(new ListCategoryQuestionsQuery(id));
+        return Ok(items);
     }
 }

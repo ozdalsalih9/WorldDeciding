@@ -9,9 +9,18 @@ public record CommentDto(
     Guid? ParentId,
     string Text,
     DateTime CreatedAt,
+    CommentAuthorDto Author,
     int LikeCount,
     bool LikedByMe,
     int ReplyCount
+);
+
+public record CommentAuthorDto(
+    Guid UserId,
+    string DisplayName,
+    string? AvatarUrl,
+    int Stars,
+    string Rank
 );
 
 public record PagedResult<T>(

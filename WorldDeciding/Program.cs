@@ -154,6 +154,8 @@ builder.Services.AddScoped<ILeaderboardReader, WorldDeciding.Infrastructure.Pers
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUser, CurrentUser>();
 
+// score service
+builder.Services.AddScoped<IUserScoreService, UserScoreService>();
 
 // --- Email (SMTP) ---
 builder.Services.Configure<SmtpOptions>(builder.Configuration.GetSection("Smtp"));

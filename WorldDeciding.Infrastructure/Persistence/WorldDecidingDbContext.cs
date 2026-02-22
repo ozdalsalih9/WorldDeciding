@@ -76,29 +76,22 @@ public class WorldDecidingDbContext
         {
             b.HasKey(x => x.Id);
 
-            // ❌ BUNU KALDIR: Günlük kısıtlamaya geçince artık bu unique yanlış/çakışır
-            // b.HasIndex(x => new { x.UserId, x.QuestionId }).IsUnique();
-
             b.HasIndex(x => x.QuestionId);
 
-            b.Property(x => x.CountryCode).HasMaxLength(2);  // ISO2
+            b.Property(x => x.CountryCode).HasMaxLength(2);
             b.Property(x => x.CountrySource).HasConversion<short>();
             b.Property(x => x.CountryProvider).HasMaxLength(50);
 
-            // ✅ Eğer VoteDate kullanıyorsan kolonu netleştir (DateOnly)
-            b.Property(x => x.VoteDate).HasColumnType("date");
-
-            // ✅ IpHash uzunluğunu sınırla (SHA256 hex = 64)
             b.Property(x => x.IpHash).HasMaxLength(64);
 
-            // ✅ Günlük 1 oy kuralı (User)
-            b.HasIndex(v => new { v.QuestionId, v.UserId, v.VoteDate })
+            // ✅ Tek aktif oy kuralı (User)
+            b.HasIndex(v => new { v.QuestionId, v.UserId })
              .IsUnique();
 
-            // ✅ Günlük 1 oy kuralı (IP)
-            b.HasIndex(v => new { v.QuestionId, v.IpHash, v.VoteDate })
-             .IsUnique();
+            // ✅ IP sadece performans için index (unique değil)
+            b.HasIndex(v => new { v.QuestionId, v.IpHash });
         });
+
 
         modelBuilder.Entity<Comment>(b =>
         {

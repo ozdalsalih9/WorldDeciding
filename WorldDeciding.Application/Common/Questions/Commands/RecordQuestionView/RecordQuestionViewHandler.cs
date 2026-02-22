@@ -34,33 +34,38 @@ public sealed class RecordQuestionViewHandler : IRequestHandler<RecordQuestionVi
     {
         var ipString = _client.ClientIp?.ToString() ?? "unknown";
         var ipHash = _ipHasher.Hash(ipString);
-        var questionId = request.QuestionId; // veya request.Id
+        var questionId = request.QuestionId;
 
+        // 1) Rate limit (silent drop)
         var key = $"abuse:ViewAttempt:ip:{ipHash}";
         var count = await _counter.IncrementAsync(key, Window, ct);
-        if (count > Limit) return; // silent drop
+        if (count > Limit) return;
 
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
 
-        var exists = await _db.QuestionViews.AnyAsync(v =>
-            v.QuestionId == request.QuestionId &&
-            v.ViewDate == today &&
-            v.IpHash == ipHash,
-            ct);
+        // 2) Günlük tekil view kontrolü
+        var exists = await _db.QuestionViews
+            .AsNoTracking()
+            .AnyAsync(v =>
+                v.QuestionId == questionId &&
+                v.ViewDate == today &&
+                v.IpHash == ipHash,
+                ct);
 
-        var utcDate = DateOnly.FromDateTime(DateTime.UtcNow);
-        await _statsWriter.IncrementViewsAsync(questionId, utcDate, ct);
+        if (exists) return; // ✅ önce return
 
-        if (exists) return;
-
+        // 3) View kaydını ekle
         _db.QuestionViews.Add(new QuestionView
         {
             Id = Guid.NewGuid(),
-            QuestionId = request.QuestionId,
+            QuestionId = questionId,
             IpHash = ipHash,
             ViewDate = today
         });
 
         await _db.SaveChangesAsync(ct);
+
+        // 4) ✅ SADECE ilk kez say
+        await _statsWriter.IncrementViewsAsync(questionId, today, ct);
     }
 }

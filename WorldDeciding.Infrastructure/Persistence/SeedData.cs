@@ -52,7 +52,7 @@ public static class SeedData
 
         await ctx.Database.MigrateAsync(ct);
 
-        // 1) Categories (Slug ve Name zorunlu alanlarına dikkat)
+        // 1) Categories
         var catSet = ctx.Set<Category>();
         var categories = new List<Category>
         {
@@ -67,12 +67,21 @@ public static class SeedData
             var exists = await catSet.AsNoTracking().AnyAsync(x => x.Id == cat.Id, ct);
             if (!exists) await catSet.AddAsync(cat, ct);
         }
+
         var catChanges = await ctx.SaveChangesAsync(ct);
         if (catChanges > 0) logger.LogInformation("Seed: {Count} categories inserted.", catChanges);
 
-        // 2) Questions + Options
-        // NOT: Question.Type DB'de int'e convert ediliyor → 0=SingleChoice varsayıyoruz.
-        const int SingleChoice = 0;
+        // 2) Roles (Admin/User) - kullanıcı seedlemiyoruz
+        var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<AppRole>>();
+        if (!await roleManager.RoleExistsAsync("Admin"))
+            await roleManager.CreateAsync(new AppRole { Name = "Admin" });
+
+        if (!await roleManager.RoleExistsAsync("User"))
+            await roleManager.CreateAsync(new AppRole { Name = "User" });
+
+        // 3) Questions + Options
+        // Default dil en, default published (istersen Draft yap)
+        var now = DateTime.UtcNow;
 
         var questions = new List<Question>
         {
@@ -81,7 +90,11 @@ public static class SeedData
                 Id = Ids.QFramework,
                 Title = "Which backend web framework do you prefer?",
                 CategoryId = Ids.CatTech,
-                Type = SingleChoice,
+                Type = QuestionType.Multi,
+                Language = "en",
+                Status = QuestionStatus.Published,
+                PublishedAt = now,
+                Source = "seed",
                 Options = new List<Option>
                 {
                     new() { Id = Ids.O_AspNetCore, Text = "ASP.NET Core" },
@@ -95,7 +108,11 @@ public static class SeedData
                 Id = Ids.QWork,
                 Title = "Which work arrangement do you prefer?",
                 CategoryId = Ids.CatLifestyle,
-                Type = SingleChoice,
+                Type = QuestionType.Multi,
+                Language = "en",
+                Status = QuestionStatus.Published,
+                PublishedAt = now,
+                Source = "seed",
                 Options = new List<Option>
                 {
                     new() { Id = Ids.O_Remote,  Text = "Remote"  },
@@ -108,7 +125,11 @@ public static class SeedData
                 Id = Ids.QSport,
                 Title = "Which sport do you follow most during world championships?",
                 CategoryId = Ids.CatSports,
-                Type = SingleChoice,
+                Type = QuestionType.Multi,
+                Language = "en",
+                Status = QuestionStatus.Published,
+                PublishedAt = now,
+                Source = "seed",
                 Options = new List<Option>
                 {
                     new() { Id = Ids.O_Football,   Text = "Football"   },
@@ -118,31 +139,6 @@ public static class SeedData
                 }
             }
         };
-
-        var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<AppRole>>();
-        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<AppUser>>();
-
-        if (!await roleManager.RoleExistsAsync("Admin"))
-        {
-            await roleManager.CreateAsync(new AppRole { Name = "Admin" });
-        }
-        if (!await roleManager.RoleExistsAsync("User"))
-        {
-            await roleManager.CreateAsync(new AppRole { Name = "User" });
-        }
-
-        // .env/appsettings'ten admin email+şifre almanız güzel olur; örnek sabit:
-        var adminEmail = "ozdalsalih9@gmail.com";
-        var admin = await userManager.FindByEmailAsync(adminEmail);
-        if (admin is null)
-        {
-            admin = new AppUser { UserName = adminEmail, Email = adminEmail, CountryCode = "TR" };
-            await userManager.CreateAsync(admin, "mstF002255.."); // güçlü bir şifre ver
-        }
-        if (!await userManager.IsInRoleAsync(admin, "Admin"))
-        {
-            await userManager.AddToRoleAsync(admin, "Admin");
-        }
 
         // Upsert mantığı: soru yoksa ekle, varsa eksik option'ları tamamla
         var qSet = ctx.Set<Question>();
@@ -157,12 +153,13 @@ public static class SeedData
                 continue;
             }
 
+            // Soru varsa, optionları eksikse tamamla
             foreach (var opt in q.Options)
             {
                 var optExists = await oSet.AsNoTracking().AnyAsync(x => x.Id == opt.Id, ct);
                 if (!optExists)
                 {
-                    opt.QuestionId = q.Id;
+                    opt.QuestionId = q.Id; // Option entity'sinde QuestionId alanı olduğunu varsayar
                     await oSet.AddAsync(opt, ct);
                 }
             }

@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using WorldDeciding.Infrastructure.Persistence;
@@ -11,9 +12,11 @@ using WorldDeciding.Infrastructure.Persistence;
 namespace WorldDeciding.Infrastructure.Migrations
 {
     [DbContext(typeof(WorldDecidingDbContext))]
-    partial class WorldDecidingDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260215143501_ScoreAdded")]
+    partial class ScoreAdded
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -271,26 +274,6 @@ namespace WorldDeciding.Infrastructure.Migrations
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Language")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("Notes")
-                        .HasColumnType("text");
-
-                    b.Property<DateTime?>("PublishedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Source")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("TagsJson")
-                        .HasColumnType("text");
 
                     b.Property<string>("Title")
                         .IsRequired()

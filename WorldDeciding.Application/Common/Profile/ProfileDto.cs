@@ -3,12 +3,24 @@
 public record MyProfileDto(
     Guid UserId,
     string Email,
-    string? DisplayName,
+    string DisplayName,
     string? Bio,
     string? AvatarUrl,
     string? CountryCode,
     DateOnly? BirthDate,
-    short Gender
+    short Gender,
+    int Score,
+    int Stars,
+    string Rank,
+    int ProfileCompletionPercent,
+    int TotalVotes,
+    int TotalComments,
+    int LikesReceived,
+    IReadOnlyList<string> Badges
+
+
+
+
 );
 
 public record UpdateMyProfileReq(

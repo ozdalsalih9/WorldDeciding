@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using WorldDeciding.Application.Comments.Commands.AddComment;
 using WorldDeciding.Application.Common.Comments;
 using WorldDeciding.Application.Common.Interfaces;
+using WorldDeciding.Application.Common.Profile;
 using WorldDeciding.Domain.Entities;
 
 namespace WorldDeciding.Application.Common.Comments.Commands.AddComment;
@@ -26,7 +27,6 @@ public sealed class AddCommentHandler : IRequestHandler<AddCommentCommand, Comme
         if (text.Length < 1) throw new ArgumentException("Comment cannot be empty.");
         if (text.Length > 2000) throw new ArgumentException("Comment too long (max 2000).");
 
-        // reply ise parent bu question'a ait mi?
         if (request.ParentId.HasValue)
         {
             var ok = await _db.Comments
@@ -50,16 +50,33 @@ public sealed class AddCommentHandler : IRequestHandler<AddCommentCommand, Comme
         _db.Comments.Add(cmt);
         await _db.SaveChangesAsync(ct);
 
+        // ✅ Author bilgisi (+Score)
+        var u = await _db.Users
+            .AsNoTracking()
+            .Where(x => x.Id == userId)
+            .Select(x => new { x.Id, x.DisplayName, x.AvatarUrl, x.Score })
+            .SingleAsync(ct);
+
+        var displayName = !string.IsNullOrWhiteSpace(u.DisplayName)
+            ? u.DisplayName!
+            : "Member " + u.Id.ToString().Substring(0, 5);
+
+        var stars = UserRankResolver.GetStars(u.Score);
+        var rank = UserRankResolver.GetTag(u.Score);
+
+        var author = new CommentAuthorDto(u.Id, displayName, u.AvatarUrl, stars, rank);
+
         return new CommentDto(
-            cmt.Id,
-            cmt.QuestionId,
-            cmt.UserId,
-            cmt.ParentId,
-            cmt.Text,
-            cmt.CreatedAt,
-            cmt.LikeCount,
-            false, // LikedByMe
-            0      // ReplyCount
+            Id: cmt.Id,
+            QuestionId: cmt.QuestionId,
+            UserId: cmt.UserId,
+            ParentId: cmt.ParentId,
+            Text: cmt.Text,
+            CreatedAt: cmt.CreatedAt,
+            Author: author,
+            LikeCount: cmt.LikeCount,
+            LikedByMe: false,
+            ReplyCount: 0
         );
     }
 }

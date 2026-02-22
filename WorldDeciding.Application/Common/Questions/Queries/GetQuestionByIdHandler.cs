@@ -13,22 +13,24 @@ public sealed class GetQuestionByIdHandler : IRequestHandler<GetQuestionByIdQuer
 
     public async Task<QuestionDto?> Handle(GetQuestionByIdQuery request, CancellationToken ct)
     {
-        // Not: Include yerine projection kullanıyoruz → daha hafif.
-        return await _db.Set<Question>().AsNoTracking()
-            .Where(q => q.Id == request.Id)
+        // ✅ SADECE Published sorular
+        return await _db.Set<Question>()
+            .AsNoTracking()
+            .Where(q => q.Id == request.Id && q.Status == QuestionStatus.Published)
             .Select(q => new QuestionDto
             {
                 Id = q.Id,
                 Title = q.Title,
                 CategoryId = q.CategoryId,
-                Type = q.Type, // QuestionDto'da enum veya short/int uyumlu olmalı
+                Type = q.Type,
                 Options = q.Options
                     .OrderBy(o => o.Text)
                     .Select(o => new OptionDto
                     {
                         Id = o.Id,
                         Text = o.Text
-                    }).ToList()
+                    })
+                    .ToList()
             })
             .FirstOrDefaultAsync(ct);
     }

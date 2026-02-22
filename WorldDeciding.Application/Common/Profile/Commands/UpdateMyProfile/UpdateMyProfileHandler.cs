@@ -29,33 +29,17 @@ public sealed class UpdateMyProfileHandler
             ?? throw new KeyNotFoundException("User not found.");
 
         // normalize + validate
-        string? displayName = string.IsNullOrWhiteSpace(request.Req.DisplayName)
-            ? null
-            : request.Req.DisplayName.Trim();
+        string? displayName = string.IsNullOrWhiteSpace(request.Req.DisplayName) ? null : request.Req.DisplayName.Trim();
+        if (displayName is { Length: > 40 }) throw new ArgumentException("DisplayName max 40.");
 
-        if (displayName is { Length: > 40 })
-            throw new ArgumentException("DisplayName max 40.");
+        string? bio = string.IsNullOrWhiteSpace(request.Req.Bio) ? null : request.Req.Bio.Trim();
+        if (bio is { Length: > 160 }) throw new ArgumentException("Bio max 160.");
 
-        string? bio = string.IsNullOrWhiteSpace(request.Req.Bio)
-            ? null
-            : request.Req.Bio.Trim();
+        string? avatarUrl = string.IsNullOrWhiteSpace(request.Req.AvatarUrl) ? null : request.Req.AvatarUrl.Trim();
+        if (avatarUrl is { Length: > 300 }) throw new ArgumentException("AvatarUrl max 300.");
 
-        if (bio is { Length: > 160 })
-            throw new ArgumentException("Bio max 160.");
-
-        string? avatarUrl = string.IsNullOrWhiteSpace(request.Req.AvatarUrl)
-            ? null
-            : request.Req.AvatarUrl.Trim();
-
-        if (avatarUrl is { Length: > 300 })
-            throw new ArgumentException("AvatarUrl max 300.");
-
-        string? country = string.IsNullOrWhiteSpace(request.Req.CountryCode)
-            ? null
-            : request.Req.CountryCode.Trim().ToUpperInvariant();
-
-        if (country is { Length: > 2 })
-            throw new ArgumentException("CountryCode must be ISO2.");
+        string? country = string.IsNullOrWhiteSpace(request.Req.CountryCode) ? null : request.Req.CountryCode.Trim().ToUpperInvariant();
+        if (country is { Length: > 2 }) throw new ArgumentException("CountryCode must be ISO2.");
 
         user.DisplayName = displayName;
         user.Bio = bio;
@@ -68,15 +52,45 @@ public sealed class UpdateMyProfileHandler
 
         await _db.SaveChangesAsync(ct);
 
+        // stats
+        var totalVotes = await _db.Votes.AsNoTracking().CountAsync(v => v.UserId == userId, ct);
+        var totalComments = await _db.Comments.AsNoTracking().CountAsync(c => c.UserId == userId, ct);
+
+        var likesReceived = await _db.CommentLikes
+            .AsNoTracking()
+            .Join(_db.Comments.AsNoTracking(),
+                l => l.CommentId,
+                c => c.Id,
+                (l, c) => new { l, c })
+            .CountAsync(x => x.c.UserId == userId, ct);
+
+        // derived
+        var rank = UserRankResolver.GetTag(user.Score);
+        var stars = UserRankResolver.GetStars(user.Score);
+        var completion = ProfileCompletenessCalculator.Calculate(user);
+        var badges = UserBadgesResolver.Resolve(totalVotes, totalComments, likesReceived, user.Score);
+
         return new MyProfileDto(
-            user.Id,
-            user.Email ?? "",
-            user.DisplayName,
-            user.Bio,
-            user.AvatarUrl,
-            user.CountryCode,
-            user.BirthDate,
-            (short)user.Gender
+            UserId: user.Id,
+            Email: user.Email ?? "",
+            DisplayName: user.DisplayName,
+            Bio: user.Bio,
+            AvatarUrl: user.AvatarUrl,
+            CountryCode: user.CountryCode,
+            BirthDate: user.BirthDate,
+            Gender: (short)user.Gender,
+
+            Score: user.Score,
+            Stars: stars,
+            Rank: rank,
+
+            ProfileCompletionPercent: completion,
+
+            TotalVotes: totalVotes,
+            TotalComments: totalComments,
+            LikesReceived: likesReceived,
+
+            Badges: badges
         );
     }
 }

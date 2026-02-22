@@ -2,7 +2,7 @@
 using Microsoft.EntityFrameworkCore;
 using WorldDeciding.Application.Common.Interfaces;
 using WorldDeciding.Application.Questions.Dtos;
-using WorldDeciding.Domain.Entities; // Question, Option, QuestionType vs.
+using WorldDeciding.Domain.Entities;
 
 namespace WorldDeciding.Application.Common.Questions.Queries
 {
@@ -13,9 +13,11 @@ namespace WorldDeciding.Application.Common.Questions.Queries
 
         public async Task<IReadOnlyList<QuestionDto>> Handle(ListQuestionsQuery req, CancellationToken ct)
         {
-            var q = _db.Questions.AsNoTracking()
-                                 .Include(x => x.Options)
-                                 .AsQueryable();
+            var q = _db.Questions
+                .AsNoTracking()
+                .Where(x => x.Status == QuestionStatus.Published)   // ✅ SADECE PUBLISHED
+                .Include(x => x.Options)
+                .AsQueryable();
 
             if (req.CategoryId is not null)
                 q = q.Where(x => x.CategoryId == req.CategoryId);
@@ -23,24 +25,27 @@ namespace WorldDeciding.Application.Common.Questions.Queries
             if (req.Type is not null)
                 q = q.Where(x => x.Type == req.Type);
 
-            var items = await q.OrderByDescending(x => x.CreatedAt)
-                               .Skip((req.Page - 1) * req.PageSize)
-                               .Take(req.PageSize)
-                               .Select(x => new QuestionDto
-                               {
-                                   Id = x.Id,
-                                   Title = x.Title,
-                                   Type = x.Type,
-                                   CategoryId = x.CategoryId,
-                                   Options = x.Options
-                                        .Select(o => new OptionDto
-                                        {
-                                            Id = o.Id,
-                                            Text = o.Text
-                                        })
-                                        .ToList()
-                               })
-                               .ToListAsync(ct);
+            var page = req.Page <= 0 ? 1 : req.Page;
+            var pageSize = req.PageSize is < 1 or > 200 ? 20 : req.PageSize;
+
+            var items = await q.OrderByDescending(x => x.PublishedAt ?? x.CreatedAt) // ✅ yayın tarihine göre daha mantıklı
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .Select(x => new QuestionDto
+                {
+                    Id = x.Id,
+                    Title = x.Title,
+                    Type = x.Type,
+                    CategoryId = x.CategoryId,
+                    Options = x.Options
+                        .Select(o => new OptionDto
+                        {
+                            Id = o.Id,
+                            Text = o.Text
+                        })
+                        .ToList()
+                })
+                .ToListAsync(ct);
 
             return items;
         }
