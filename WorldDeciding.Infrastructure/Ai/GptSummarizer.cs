@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using System.Linq;
 using System.Net;
 using System.Net.Http.Json;
@@ -13,10 +14,12 @@ public sealed class GptSummarizer : IAiSummarizer
     private readonly HttpClient _http;
     private readonly string _apiKey;
     private readonly string _model;
+    private readonly ILogger<GptSummarizer> _logger;
 
-    public GptSummarizer(HttpClient http, IConfiguration cfg)
+    public GptSummarizer(HttpClient http, IConfiguration cfg, ILogger<GptSummarizer> logger)
     {
         _http = http;
+        _logger = logger;
         _apiKey = cfg["Gemini:ApiKey"]
             ?? throw new InvalidOperationException("Gemini ApiKey not configured.");
         _model = cfg["Gemini:Model"] ?? "gemini-2.5-flash";
@@ -84,8 +87,7 @@ Comments:
 
             if (!res.IsSuccessStatusCode)
             {
-                Console.WriteLine($"Gemini HTTP {(int)res.StatusCode} {res.StatusCode}");
-                Console.WriteLine(raw);
+                _logger.LogWarning("Gemini HTTP {StatusCode}", res.StatusCode);
                 return "Summary could not be generated at the moment.";
             }
 
@@ -96,8 +98,7 @@ Comments:
             if (root.TryGetProperty("promptFeedback", out var promptFeedback) &&
                 promptFeedback.TryGetProperty("blockReason", out var blockReason))
             {
-                Console.WriteLine($"Gemini prompt blocked: {blockReason}");
-                Console.WriteLine(raw);
+                _logger.LogWarning("Gemini prompt blocked: {Reason}", blockReason);
                 return "Summary could not be generated at the moment.";
             }
 
@@ -105,8 +106,7 @@ Comments:
                 candidates.ValueKind != JsonValueKind.Array ||
                 candidates.GetArrayLength() == 0)
             {
-                Console.WriteLine("Gemini response has no candidates:");
-                Console.WriteLine(raw);
+                _logger.LogWarning("Gemini response has no candidates");
                 return "Summary could not be generated at the moment.";
             }
 
@@ -118,7 +118,7 @@ Comments:
                 if (!string.IsNullOrWhiteSpace(finishReasonValue) &&
                     !finishReasonValue.Equals("STOP", StringComparison.OrdinalIgnoreCase))
                 {
-                    Console.WriteLine($"Gemini finishReason: {finishReasonValue}");
+                    _logger.LogInformation("Gemini finishReason: {FinishReason}", finishReasonValue);
                 }
             }
 
@@ -127,8 +127,7 @@ Comments:
                 parts.ValueKind != JsonValueKind.Array ||
                 parts.GetArrayLength() == 0)
             {
-                Console.WriteLine("Gemini response has no content parts:");
-                Console.WriteLine(raw);
+                _logger.LogWarning("Gemini response has no content parts");
                 return "Summary could not be generated at the moment.";
             }
 
@@ -145,8 +144,7 @@ Comments:
 
             if (texts.Count == 0)
             {
-                Console.WriteLine("Gemini parts exist but no text field found:");
-                Console.WriteLine(raw);
+                _logger.LogWarning("Gemini parts exist but no text field found");
                 return "Summary could not be generated.";
             }
 
@@ -154,8 +152,7 @@ Comments:
         }
         catch (Exception ex)
         {
-            Console.WriteLine("Gemini summarization exception:");
-            Console.WriteLine(ex);
+            _logger.LogError(ex, "Gemini summarization exception");
             return "Summary is currently unavailable.";
         }
     }
