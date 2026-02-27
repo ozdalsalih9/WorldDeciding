@@ -6,15 +6,15 @@ services:
     container_name: worlddeciding_postgres
     restart: always
     environment:
-      POSTGRES_USER: worlddeciding
-      POSTGRES_PASSWORD: mstF002255
-      POSTGRES_DB: worlddeciding
+      POSTGRES_USER: ${POSTGRES_USER:-worlddeciding}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-worlddeciding}
     ports:
       - "5433:5432"                  # host:5433 → container:5432
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U worlddeciding -d worlddeciding"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-worlddeciding} -d ${POSTGRES_DB:-worlddeciding}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -35,8 +35,8 @@ services:
     container_name: worlddeciding_pgadmin
     restart: unless-stopped
     environment:
-      PGADMIN_DEFAULT_EMAIL: admin@admin.com
-      PGADMIN_DEFAULT_PASSWORD: admin123
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@admin.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:?Set PGADMIN_PASSWORD in .env}
     ports:
       - "5050:80"                    # http://localhost:5050
     depends_on:

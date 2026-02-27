@@ -37,15 +37,6 @@ public class QuestionsController : ControllerBase
         return Ok(result);
     }
 
-    [HttpGet("test-redis")]
-    public async Task<IActionResult> TestRedis([FromServices] IAppCache appCache)
-    {
-        var key = "test:hello";
-        await appCache.SetAsync(key, new { Message = "Hello from WorldDeciding", Time = DateTime.UtcNow }, TimeSpan.FromMinutes(5));
-        var value = await appCache.GetAsync<object>(key);
-        return Ok(value);
-    }
-
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<QuestionDto>> GetById([FromRoute] Guid id)
     {

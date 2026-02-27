@@ -24,14 +24,6 @@ using WorldDeciding.Infrastructure.Ai;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// ---- DEBUG (geçici) ----
-Console.WriteLine("ENV=" + builder.Environment.EnvironmentName);
-Console.WriteLine("ContentRoot=" + builder.Environment.ContentRootPath);
-Console.WriteLine("Redis:Configuration=" + builder.Configuration.GetSection("Redis").GetValue<string>("Configuration"));
-
-var pepper = builder.Configuration["RefreshToken:Pepper"];
-Console.WriteLine($"[CONFIG] RefreshToken:Pepper loaded? {(string.IsNullOrWhiteSpace(pepper) ? "NO" : "YES")}");
-
 // --- Logging ---
 builder.Host.UseSerilog((ctx, lc) => lc
     .ReadFrom.Configuration(ctx.Configuration)
@@ -220,6 +212,16 @@ var app = builder.Build();
 
 // --- Middleware pipeline ---
 app.UseSerilogRequestLogging();
+
+// Security headers
+app.Use(async (context, next) =>
+{
+    context.Response.Headers["X-Content-Type-Options"] = "nosniff";
+    context.Response.Headers["X-Frame-Options"] = "DENY";
+    context.Response.Headers["Referrer-Policy"] = "strict-origin-when-cross-origin";
+    context.Response.Headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()";
+    await next();
+});
 
 // Proxy header'ları auth öncesi okumalı
 app.UseForwardedHeaders();
