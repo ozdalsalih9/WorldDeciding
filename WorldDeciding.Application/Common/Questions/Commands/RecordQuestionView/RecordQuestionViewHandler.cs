@@ -37,8 +37,17 @@ public sealed class RecordQuestionViewHandler : IRequestHandler<RecordQuestionVi
         var questionId = request.QuestionId;
 
         // 1) Rate limit (silent drop)
+        // 5dk pencere içinde max 120 attempt
         var key = $"abuse:ViewAttempt:ip:{ipHash}";
-        var count = await _counter.IncrementAsync(key, Window, ct);
+
+        var count = await _counter.IncrementAsync(
+            key: key,
+            ttl: Window,          // ✅ key'in Redis'te yaşaması
+            limit: Limit,         // ✅ max deneme
+            window: Window,       // ✅ ölçüm penceresi
+            ct: ct
+        );
+
         if (count > Limit) return;
 
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
@@ -52,7 +61,7 @@ public sealed class RecordQuestionViewHandler : IRequestHandler<RecordQuestionVi
                 v.IpHash == ipHash,
                 ct);
 
-        if (exists) return; // ✅ önce return
+        if (exists) return;
 
         // 3) View kaydını ekle
         _db.QuestionViews.Add(new QuestionView

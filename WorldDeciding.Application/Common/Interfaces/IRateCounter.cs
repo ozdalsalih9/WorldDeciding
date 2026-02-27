@@ -2,5 +2,6 @@
 
 public interface IRateCounter
 {
-    Task<long> IncrementAsync(string key, TimeSpan ttl, CancellationToken ct);
+    Task<long> IncrementAsync(string key, TimeSpan ttl, int limit, TimeSpan window, CancellationToken ct);
+
 }

@@ -10,19 +10,17 @@ using Microsoft.OpenApi.Models;
 using Serilog;
 using StackExchange.Redis;
 using System.Text;
-
 using WorldDeciding.Application;
 using WorldDeciding.Application.Common.Interfaces;
-
+using WorldDeciding.Domain.Identity;
 using WorldDeciding.Infrastructure.Email;
 using WorldDeciding.Infrastructure.Geo;
-using WorldDeciding.Domain.Identity;
+using WorldDeciding.Infrastructure.Identity; // RateLimitExceptionMiddleware burada
 using WorldDeciding.Infrastructure.Persistence;
 using WorldDeciding.Infrastructure.Security;
 using WorldDeciding.Infrastructure.Services;
-
 using WorldDeciding.Services;
-using WorldDeciding.Infrastructure.Identity; // RateLimitExceptionMiddleware burada
+using WorldDeciding.Infrastructure.Ai;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -153,6 +151,10 @@ builder.Services.AddScoped<ILeaderboardReader, WorldDeciding.Infrastructure.Pers
 // Current User
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUser, CurrentUser>();
+
+//GPT Summarizer
+builder.Services.AddHttpClient<IAiSummarizer, GptSummarizer>();
+
 
 // score service
 builder.Services.AddScoped<IUserScoreService, UserScoreService>();

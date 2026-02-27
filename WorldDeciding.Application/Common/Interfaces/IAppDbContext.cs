@@ -17,6 +17,7 @@ public interface IAppDbContext
     DbSet<RefreshToken> RefreshTokens { get; }
     DbSet<AppUser> Users { get; }
     DbSet<Category> Categories { get; }
+    DbSet<QuestionCommentSummary> QuestionCommentSummaries { get; }
     DbSet<TEntity> Set<TEntity>() where TEntity : class;
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
     DatabaseFacade Database { get; }

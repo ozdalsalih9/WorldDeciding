@@ -24,7 +24,7 @@ public class WorldDecidingDbContext
     public DbSet<QuestionStatsDaily> QuestionStatsDaily => Set<QuestionStatsDaily>();
     public DbSet<LeaderboardRow> LeaderboardRows => Set<LeaderboardRow>();
     public DbSet<CommentLike> CommentLikes => Set<CommentLike>();
-
+    public DbSet<QuestionCommentSummary> QuestionCommentSummaries => Set<QuestionCommentSummary>();
 
 
 

@@ -8,7 +8,7 @@ public sealed class RedisRateCounter : IRateCounter
     private readonly IConnectionMultiplexer _mux;
     public RedisRateCounter(IConnectionMultiplexer mux) => _mux = mux;
 
-    public async Task<long> IncrementAsync(string key, TimeSpan ttl, CancellationToken ct)
+    public async Task<long> IncrementAsync(string key, TimeSpan ttl, int limit, TimeSpan window, CancellationToken ct)
     {
         var db = _mux.GetDatabase();
 

@@ -49,6 +49,14 @@ public sealed class AddCommentHandler : IRequestHandler<AddCommentCommand, Comme
 
         _db.Comments.Add(cmt);
         await _db.SaveChangesAsync(ct);
+        // 🔴 Summary stale
+        var summary = await _db.Set<QuestionCommentSummary>()
+            .FirstOrDefaultAsync(x => x.QuestionId == request.QuestionId, ct);
+
+        if (summary is not null)
+        {
+            summary.IsStale = true;
+        }
 
         // ✅ Author bilgisi (+Score)
         var u = await _db.Users

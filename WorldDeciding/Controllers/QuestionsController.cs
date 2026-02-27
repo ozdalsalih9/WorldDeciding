@@ -2,6 +2,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using WorldDeciding.Application.Common.Interfaces;
+using WorldDeciding.Application.Common.Questions.Dtos;
 using WorldDeciding.Application.Common.Questions.Queries;
 using WorldDeciding.Application.Questions.Commands.CreateQuestion;
 using WorldDeciding.Application.Questions.Commands.RecordQuestionView;
@@ -79,5 +80,12 @@ public class QuestionsController : ControllerBase
     {
         await _mediator.Send(new RecordQuestionViewCommand(id), ct);
         return NoContent();
+    }
+    [AllowAnonymous]
+    [HttpGet("{id:guid}/summary")]
+    public async Task<ActionResult<QuestionSummaryDto>> GetSummary(Guid id)
+    {
+        var dto = await _mediator.Send(new GetQuestionSummaryQuery(id));
+        return Ok(dto);
     }
 }
