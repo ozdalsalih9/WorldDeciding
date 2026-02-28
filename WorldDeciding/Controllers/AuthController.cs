@@ -130,17 +130,25 @@ public class AuthController : ControllerBase
         var frontendBaseUrl = cfg["Frontend:BaseUrl"] ?? "http://localhost:5173";
         var confirmUrl = $"{frontendBaseUrl}/verify-email?userId={user.Id}&token={encodedToken}";
 
-        await emailSender.SendAsync(
-            user.Email!,
-            "Confirm your WorldDeciding account",
-            $"""
-            <div style="font-family: Arial, sans-serif; line-height: 1.5;">
-              <h2>Welcome to WorldDeciding 👋</h2>
-              <p>To activate your account, please confirm your email:</p>
-              <p><a href="{confirmUrl}">Confirm Email</a></p>
-              <p>If you didn’t create this account, you can ignore this email.</p>
-            </div>
-            """);
+        try
+        {
+            await emailSender.SendAsync(
+                user.Email!,
+                "Confirm your WorldDeciding account",
+                $"""
+                <div style="font-family: Arial, sans-serif; line-height: 1.5;">
+                  <h2>Welcome to WorldDeciding 👋</h2>
+                  <p>To activate your account, please confirm your email:</p>
+                  <p><a href="{confirmUrl}">Confirm Email</a></p>
+                  <p>If you didn’t create this account, you can ignore this email.</p>
+                </div>
+                """);
+        }
+        catch
+        {
+            // SMTP may not be configured (e.g. placeholder values in appsettings).
+            // The user is already created; they can use /resend-confirmation later.
+        }
 
         return Ok(new { message = "Registration successful. Please check your email to confirm your account." });
     }
@@ -232,19 +240,27 @@ public class AuthController : ControllerBase
         var frontendBaseUrl = cfg["Frontend:BaseUrl"] ?? "http://localhost:5173";
         var resetUrl = $"{frontendBaseUrl}/reset-password?email={Uri.EscapeDataString(req.Email)}&token={encodedToken}";
 
-        await emailSender.SendAsync(
-            req.Email,
-            "WorldDeciding password reset",
-            $"""
-            <div style="font-family: Arial, sans-serif; line-height: 1.6;">
-              <h2>Password reset requested</h2>
-              <p>Use the token below in the Reset Password screen, or click the link.</p>
-              <p><b>Reset token:</b></p>
-              <pre style="padding:12px;border-radius:8px;background:#f5f5f5;white-space:pre-wrap;">{encodedToken}</pre>
-              <p><a href="{resetUrl}">Open reset page</a></p>
-              <p>If you did not request this, you can ignore this email.</p>
-            </div>
-            """);
+        try
+        {
+            await emailSender.SendAsync(
+                req.Email,
+                "WorldDeciding password reset",
+                $"""
+                <div style="font-family: Arial, sans-serif; line-height: 1.6;">
+                  <h2>Password reset requested</h2>
+                  <p>Use the token below in the Reset Password screen, or click the link.</p>
+                  <p><b>Reset token:</b></p>
+                  <pre style="padding:12px;border-radius:8px;background:#f5f5f5;white-space:pre-wrap;">{encodedToken}</pre>
+                  <p><a href="{resetUrl}">Open reset page</a></p>
+                  <p>If you did not request this, you can ignore this email.</p>
+                </div>
+                """);
+        }
+        catch
+        {
+            // SMTP may not be configured (e.g. placeholder values in appsettings).
+            // Enumeration-safe: still return generic 200.
+        }
 
         return Ok(new { message = "If the email exists, a reset token has been sent." });
     }
