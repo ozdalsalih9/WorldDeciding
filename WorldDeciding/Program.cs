@@ -28,7 +28,11 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Host.UseSerilog((ctx, lc) => lc
     .ReadFrom.Configuration(ctx.Configuration)
     .WriteTo.Console());
-
+//user secrets
+if (builder.Environment.IsDevelopment())
+{
+    builder.Configuration.AddUserSecrets<Program>(optional: true);
+}
 // --- DbContext ---
 builder.Services.AddDbContext<WorldDecidingDbContext>(opt =>
     opt.UseNpgsql(builder.Configuration.GetConnectionString("Default")));
