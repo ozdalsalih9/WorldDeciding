@@ -1,4 +1,5 @@
-﻿using Microsoft.EntityFrameworkCore.Migrations;
+﻿using System;
+using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
@@ -14,6 +15,19 @@ namespace WorldDeciding.Infrastructure.Migrations
                 name: "IX_Comments_QuestionId",
                 table: "Comments");
 
+            migrationBuilder.AddColumn<Guid>(
+                name: "ParentId",
+                table: "Comments",
+                type: "uuid",
+                nullable: true);
+
+            migrationBuilder.AddColumn<int>(
+                name: "LikeCount",
+                table: "Comments",
+                type: "integer",
+                nullable: false,
+                defaultValue: 0);
+
             migrationBuilder.AlterColumn<string>(
                 name: "Text",
                 table: "Comments",
@@ -23,6 +37,29 @@ namespace WorldDeciding.Infrastructure.Migrations
                 oldClrType: typeof(string),
                 oldType: "character varying(500)",
                 oldMaxLength: 500);
+
+            migrationBuilder.CreateTable(
+                name: "CommentLikes",
+                columns: table => new
+                {
+                    CommentId = table.Column<Guid>(type: "uuid", nullable: false),
+                    UserId = table.Column<Guid>(type: "uuid", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_CommentLikes", x => new { x.CommentId, x.UserId });
+                });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_CommentLikes_CommentId",
+                table: "CommentLikes",
+                column: "CommentId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_CommentLikes_UserId",
+                table: "CommentLikes",
+                column: "UserId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_Comments_ParentId_CreatedAt",
@@ -50,12 +87,23 @@ namespace WorldDeciding.Infrastructure.Migrations
                 name: "FK_Comments_Comments_ParentId",
                 table: "Comments");
 
+            migrationBuilder.DropTable(
+                name: "CommentLikes");
+
             migrationBuilder.DropIndex(
                 name: "IX_Comments_ParentId_CreatedAt",
                 table: "Comments");
 
             migrationBuilder.DropIndex(
                 name: "IX_Comments_QuestionId_ParentId_LikeCount_CreatedAt",
+                table: "Comments");
+
+            migrationBuilder.DropColumn(
+                name: "ParentId",
+                table: "Comments");
+
+            migrationBuilder.DropColumn(
+                name: "LikeCount",
                 table: "Comments");
 
             migrationBuilder.AlterColumn<string>(
