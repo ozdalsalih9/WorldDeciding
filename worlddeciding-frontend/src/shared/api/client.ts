@@ -14,10 +14,10 @@ export function getAccessToken() {
   return accessTokenMemory
 }
 
-// In dev: use Vite proxy via relative '/api' calls (baseURL empty).
-// In prod: use explicit API base from env.
+// Behind Caddy in production, the frontend should call the same origin by default.
+// `VITE_API_BASE` remains available for deployments that need an explicit API host.
 const api = Axios.create({
-  baseURL: import.meta.env.DEV ? '' : (import.meta.env.VITE_API_BASE || ''),
+  baseURL: import.meta.env.VITE_API_BASE || '',
   withCredentials: true,
 })
 
@@ -31,7 +31,7 @@ api.interceptors.request.use((config) => {
 })
 
 const refreshClient = Axios.create({
-  baseURL: import.meta.env.DEV ? '' : (import.meta.env.VITE_API_BASE || ''),
+  baseURL: import.meta.env.VITE_API_BASE || '',
   withCredentials: true,
 })
 
