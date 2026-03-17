@@ -3,18 +3,17 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.WebUtilities;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 using WorldDeciding.Application.Auth.Commands.Refresh;
-using WorldDeciding.Application.Common.Auth.Models;                  // AuthTokensDto burada olmalı
 using WorldDeciding.Application.Common.Interfaces;
 using WorldDeciding.Application.Common.Models;
-using WorldDeciding.Domain.Entities;                          // RefreshToken entity
+using WorldDeciding.Domain.Entities;
 using WorldDeciding.Domain.Identity;
-
-
+using WorldDeciding.Infrastructure.Security;
 
 namespace WorldDeciding.Controllers;
 
@@ -31,6 +30,7 @@ public class AuthController : ControllerBase
     private readonly IClientContext _client;
     private readonly IIpHasher _ipHasher;
     private readonly IAbuseDetector _abuse;
+    private readonly RefreshCookieOptions _refreshCookieOptions;
 
     public AuthController(
         UserManager<AppUser> users,
@@ -40,7 +40,8 @@ public class AuthController : ControllerBase
         IRefreshTokenService refreshTokens,
         IClientContext client,
         IIpHasher ipHasher,
-        IAbuseDetector abuse)
+        IAbuseDetector abuse,
+        IOptions<RefreshCookieOptions> refreshCookieOptions)
     {
         _users = users;
         _cfg = cfg;
@@ -50,9 +51,11 @@ public class AuthController : ControllerBase
         _client = client;
         _ipHasher = ipHasher;
         _abuse = abuse;
+        _refreshCookieOptions = refreshCookieOptions.Value;
     }
 
     // ==== DTOs ====
+
     public record RegisterReq(
         string Email,
         string Password,
@@ -63,10 +66,8 @@ public class AuthController : ControllerBase
 
     public record LoginReq(string Email, string Password);
 
-    // ✅ Login artık refresh token da döndürüyor
     public record AuthRes(
         string AccessToken,
-        string RefreshToken,
         string Email,
         string? CountryCode,
         DateOnly? BirthDate,
@@ -78,7 +79,6 @@ public class AuthController : ControllerBase
     public record ForgotPasswordReq(string Email);
     public record ResetPasswordReq(string Email, string Token, string NewPassword, string ConfirmNewPassword);
     public record ResendConfirmationReq(string Email);
-
 
     // ==== Endpoints ====
 
@@ -99,7 +99,8 @@ public class AuthController : ControllerBase
         {
             var today = DateOnly.FromDateTime(DateTime.UtcNow);
             var age = today.Year - dob.Year - (today < dob.AddYears(today.Year - dob.Year) ? 1 : 0);
-            if (age < 13) return BadRequest(new { message = "Users must be 13+." });
+            if (age < 13)
+                return BadRequest(new { message = "Users must be 13+." });
         }
 
         if (req.Gender is short g && (g < 0 || g > 4))
@@ -156,9 +157,9 @@ public class AuthController : ControllerBase
     [HttpGet("confirm-email")]
     [AllowAnonymous]
     public async Task<IActionResult> ConfirmEmailGet(
-    [FromQuery] string userId,
-    [FromQuery] string token,
-    CancellationToken ct)
+        [FromQuery] string userId,
+        [FromQuery] string token,
+        CancellationToken ct)
     {
         var feBase = (_cfg["Frontend:BaseUrl"] ?? "http://localhost:5173").TrimEnd('/');
 
@@ -200,8 +201,6 @@ public class AuthController : ControllerBase
         }
     }
 
-
-
     [HttpPost("forgot-password")]
     [AllowAnonymous]
     public async Task<IActionResult> ForgotPassword(
@@ -228,11 +227,7 @@ public class AuthController : ControllerBase
             ct);
 
         if (decision.Mode == WorldDeciding.Application.Common.Abuse.AbuseMode.Throttle)
-        {
-            // Enumeration bozma: yine 200 dön, ama mail gönderme.
             return Ok(new { message = "If the email exists, a reset token has been sent." });
-        }
-
 
         var token = await _users.GeneratePasswordResetTokenAsync(user);
         var encodedToken = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(token));
@@ -269,11 +264,9 @@ public class AuthController : ControllerBase
     [AllowAnonymous]
     public async Task<ActionResult<AuthRes>> Login([FromBody] LoginReq req, CancellationToken ct)
     {
-        // IP hash (privacy-safe)
         var ip = _client.ClientIp?.ToString() ?? "unknown";
         var ipHash = _ipHasher.Hash(ip);
 
-        // 1) Throttle check (IP bazlı)
         var loginDecision = await _abuse.CheckAsync(
             WorldDeciding.Application.Common.Abuse.AbuseAction.LoginAttempt,
             userId: null,
@@ -289,29 +282,24 @@ public class AuthController : ControllerBase
 
         var user = await _users.FindByEmailAsync(req.Email);
 
-        // 2) Invalid credentials → failure sayacı artır (enumeration bozma)
         if (user is null || !await _users.CheckPasswordAsync(user, req.Password))
         {
             await _abuse.MarkLoginFailureAsync(ipHash, ct);
             return Unauthorized(new { message = "Invalid email or password." });
         }
 
-        // 3) Email confirmed
         if (!user.EmailConfirmed)
             return Unauthorized(new { message = "Please confirm your email first." });
 
         var roles = (await _users.GetRolesAsync(user)).ToArray();
 
-        // ✅ Access token
         var accessToken = await GenerateJwtAsync(user, roles);
 
-        // ✅ Refresh token (DB’ye yaz)
         var now = DateTimeOffset.UtcNow;
         var refreshPlain = _refreshTokens.GenerateToken();
         var refreshHash = _refreshTokens.HashToken(refreshPlain);
         var familyId = Guid.NewGuid();
 
-        // refresh token'a ipHash bağla (opsiyonel)
         var refreshEntity = new RefreshToken(
             userId: user.Id,
             tokenHash: refreshHash,
@@ -324,9 +312,10 @@ public class AuthController : ControllerBase
         _db.RefreshTokens.Add(refreshEntity);
         await _db.SaveChangesAsync(ct);
 
+        AppendRefreshTokenCookie(refreshPlain);
+
         return Ok(new AuthRes(
             accessToken,
-            refreshPlain,
             user.Email!,
             user.CountryCode,
             user.BirthDate,
@@ -336,34 +325,26 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("resend-confirmation")]
+    [AllowAnonymous]
     public async Task<IActionResult> ResendConfirmation(
-    [FromBody] ResendConfirmationReq req,
-    [FromServices] IEmailSender emailSender,
-    [FromServices] IConfiguration cfg,
-    CancellationToken ct)
+        [FromBody] ResendConfirmationReq req,
+        [FromServices] IEmailSender emailSender,
+        [FromServices] IConfiguration cfg,
+        CancellationToken ct)
     {
-        // Enumeration-safe: her durumda 204 döneceğiz
         var email = (req.Email ?? "").Trim().ToLowerInvariant();
         if (string.IsNullOrWhiteSpace(email))
             return NoContent();
 
         var user = await _users.FindByEmailAsync(email);
-        if (user == null)
-            return NoContent();
-
-        if (user.EmailConfirmed)
+        if (user == null || user.EmailConfirmed)
             return NoContent();
 
         var token = await _users.GenerateEmailConfirmationTokenAsync(user);
+        var encodedToken = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(token));
 
-        // URL-safe token
-        var encodedToken = WebEncoders.Base64UrlEncode(System.Text.Encoding.UTF8.GetBytes(token));
-
-        // Frontend confirm URL (configten al)
-        // appsettings: Frontend:BaseUrl = "http://localhost:5173"
         var apiBase = cfg["Api:BaseUrl"] ?? "https://localhost:7200";
         var link = $"{apiBase.TrimEnd('/')}/api/auth/confirm-email?userId={user.Id}&token={encodedToken}";
-
 
         var subject = "Confirm your email";
         var html = $@"
@@ -378,33 +359,49 @@ public class AuthController : ControllerBase
         }
         catch
         {
-            // Dev ortamında SMTP patlıyorsa bile enumeration-safe davran.
-            // İstersen log bas (Serilog) ama client'a hata verme.
+            // intentionally swallow for enumeration-safe behavior
         }
 
         return NoContent();
     }
 
-    public sealed record RefreshRequest(string RefreshToken);
-
     [AllowAnonymous]
     [HttpPost("refresh")]
-    public async Task<IActionResult> Refresh([FromBody] RefreshRequest request, CancellationToken ct)
+    public async Task<IActionResult> Refresh(CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(request.RefreshToken))
-            return Unauthorized(new { message = "Missing refreshToken" });
+        if (!Request.Cookies.TryGetValue(_refreshCookieOptions.Name, out var refreshToken) ||
+            string.IsNullOrWhiteSpace(refreshToken))
+        {
+            return Unauthorized(new { message = "Refresh token cookie missing." });
+        }
 
         try
         {
-            var result = await _mediator.Send(new RefreshCommand(request.RefreshToken), ct);
-            return Ok(result);
+            var result = await _mediator.Send(new RefreshCommand(refreshToken), ct);
+
+            // refresh token rotation varsa yeni cookie yaz
+            if (!string.IsNullOrWhiteSpace(result.RefreshToken))
+                AppendRefreshTokenCookie(result.RefreshToken);
+
+            // ❗ refreshToken body'de dönmüyor
+            return Ok(new
+            {
+                accessToken = result.AccessToken
+            });
         }
         catch (UnauthorizedAccessException ex)
         {
+            DeleteRefreshTokenCookie();
             return Unauthorized(new { message = ex.Message });
         }
     }
 
+    [HttpPost("logout")]
+    public IActionResult Logout()
+    {
+        DeleteRefreshTokenCookie();
+        return NoContent();
+    }
 
     [HttpPost("reset-password")]
     [AllowAnonymous]
@@ -435,11 +432,13 @@ public class AuthController : ControllerBase
         var result = await _users.ResetPasswordAsync(user, decodedToken, req.NewPassword);
 
         if (!result.Succeeded)
+        {
             return BadRequest(new
             {
                 message = "Password reset failed.",
                 errors = result.Errors.Select(e => new { e.Code, e.Description })
             });
+        }
 
         return Ok(new { message = "Password reset successful." });
     }
@@ -452,7 +451,6 @@ public class AuthController : ControllerBase
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwt["Key"]!));
         var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
-        // AccessTokenMinutes config (yoksa 15)
         var minutes = 15;
         if (int.TryParse(jwt["AccessTokenMinutes"], out var m) && m > 0)
             minutes = m;
@@ -461,8 +459,6 @@ public class AuthController : ControllerBase
         {
             new(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
             new(JwtRegisteredClaimNames.Email, user.Email ?? string.Empty),
-
-            // ✅ token’ı her seferinde benzersiz yapar
             new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
         };
 
@@ -486,5 +482,47 @@ public class AuthController : ControllerBase
         );
 
         return Task.FromResult(new JwtSecurityTokenHandler().WriteToken(token));
+    }
+
+    private void AppendRefreshTokenCookie(string refreshToken)
+    {
+        var sameSite = ParseSameSite(_refreshCookieOptions.SameSite);
+
+        Response.Cookies.Append(
+            _refreshCookieOptions.Name,
+            refreshToken,
+            new CookieOptions
+            {
+                HttpOnly = _refreshCookieOptions.HttpOnly,
+                Secure = _refreshCookieOptions.Secure,
+                SameSite = sameSite,
+                Path = _refreshCookieOptions.Path,
+                Expires = DateTimeOffset.UtcNow.AddDays(_refreshCookieOptions.Days)
+            });
+    }
+
+    private void DeleteRefreshTokenCookie()
+    {
+        var sameSite = ParseSameSite(_refreshCookieOptions.SameSite);
+
+        Response.Cookies.Delete(
+            _refreshCookieOptions.Name,
+            new CookieOptions
+            {
+                HttpOnly = _refreshCookieOptions.HttpOnly,
+                Secure = _refreshCookieOptions.Secure,
+                SameSite = sameSite,
+                Path = _refreshCookieOptions.Path
+            });
+    }
+
+    private static SameSiteMode ParseSameSite(string? value)
+    {
+        return value?.ToLowerInvariant() switch
+        {
+            "none" => SameSiteMode.None,
+            "strict" => SameSiteMode.Strict,
+            _ => SameSiteMode.Lax
+        };
     }
 }

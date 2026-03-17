@@ -1,0 +1,237 @@
+﻿import { useMemo, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import useAuth from '@/features/auth'
+import { useToast } from '@/shared/ui/toast'
+import worldDecidingLogo from '@/shared/logo/worlddeciding.png'
+
+const genderOptions = [
+  { value: 0, label: 'Prefer not to say' },
+  { value: 1, label: 'Female' },
+  { value: 2, label: 'Male' },
+]
+
+const passwordRules = [
+  'At least 10 characters',
+  'At least 1 digit',
+  'At least 1 uppercase letter',
+  'At least 1 lowercase letter',
+  'At least 1 symbol (e.g. !@#$%)',
+]
+
+type CountryOption = {
+  code: string
+  label: string
+}
+
+export default function Register() {
+  const { register } = useAuth()
+  const nav = useNavigate()
+  const toast = useToast()
+
+  const regionDisplayNames = useMemo(() => {
+    try {
+      return new Intl.DisplayNames(['en'], { type: 'region' })
+    } catch {
+      return null
+    }
+  }, [])
+
+  const countryOptions = useMemo<CountryOption[]>(() => {
+    const fallback: CountryOption[] = [
+      { code: 'TR', label: 'Turkey (TR)' },
+      { code: 'US', label: 'United States (US)' },
+      { code: 'GB', label: 'United Kingdom (GB)' },
+      { code: 'DE', label: 'Germany (DE)' },
+      { code: 'FR', label: 'France (FR)' },
+    ]
+
+    if (!regionDisplayNames) {
+      return fallback
+    }
+
+    const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+    const options: CountryOption[] = []
+
+    for (const first of letters) {
+      for (const second of letters) {
+        const code = `${first}${second}`
+        const name = regionDisplayNames.of(code)
+        if (!name || name === code || name.toLowerCase() === 'unknown region') continue
+        options.push({ code, label: `${name} (${code})` })
+      }
+    }
+
+    if (!options.length) return fallback
+
+    return options.sort((a, b) => a.label.localeCompare(b.label))
+  }, [regionDisplayNames])
+
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [countryCode, setCountryCode] = useState('TR')
+  const [countryQuery, setCountryQuery] = useState('')
+  const [birthDate, setBirthDate] = useState('')
+  const [gender, setGender] = useState(0)
+  const [error, setError] = useState<string | null>(null)
+  const [isSubmitting, setSubmitting] = useState(false)
+
+  const filteredCountryOptions = useMemo(() => {
+    const q = countryQuery.trim().toLowerCase()
+    if (!q) return countryOptions
+    return countryOptions.filter(
+      item => item.label.toLowerCase().includes(q) || item.code.toLowerCase().includes(q)
+    )
+  }, [countryOptions, countryQuery])
+
+  const countrySelectOptions = useMemo(() => {
+    const hasSelected = filteredCountryOptions.some(item => item.code === countryCode)
+    if (hasSelected || !countryCode) return filteredCountryOptions
+    const selected = countryOptions.find(item => item.code === countryCode)
+    return selected ? [selected, ...filteredCountryOptions] : filteredCountryOptions
+  }, [countryCode, countryOptions, filteredCountryOptions])
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError(null)
+    setSubmitting(true)
+    try {
+      await register({
+        email,
+        password,
+        countryCode,
+        birthDate,
+        gender,
+      })
+      const verifyMessage = 'Registration successful. Please verify your email before signing in.'
+      nav('/login', { replace: true, state: { message: verifyMessage } })
+    } catch (err: any) {
+      const msg = err?.response?.data?.message ?? err?.message ?? 'Sign up failed'
+      setError(msg)
+      toast.error(msg)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <section className="auth-stage">
+      <div className="auth-stage-backdrop">
+        <span className="auth-orb auth-orb-a" />
+        <span className="auth-orb auth-orb-b" />
+        <span className="auth-grid" />
+      </div>
+
+      <div className="auth-shell auth-shell-wide">
+        <div className="auth-panel">
+          <div className="auth-brand">
+            <img src={worldDecidingLogo} alt="WorldDeciding logo" className="auth-brand-logo" />
+            <span>WorldDeciding</span>
+          </div>
+          <p className="auth-kicker">Create account</p>
+          <h1 className="auth-title">Start your voting profile</h1>
+          <p className="auth-subtitle">
+            Choose your country carefully during registration. It cannot be changed later from your profile.
+          </p>
+
+          <form className="auth-form-grid" onSubmit={handleSubmit}>
+            <div className="auth-col-span-2">
+              <label className="label">Email</label>
+              <input
+                required
+                type="email"
+                className="input auth-input"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <label className="label">Password</label>
+              <input
+                required
+                type="password"
+                className="input auth-input"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+              />
+              <div className="auth-rules">
+                <p className="auth-rules-title">Password rules</p>
+                <ul className="auth-rules-list">
+                  {passwordRules.map(rule => (
+                    <li key={rule}>- {rule}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+
+            <div>
+              <label className="label">Country (search + select)</label>
+              <input
+                className="input auth-input mb-2"
+                placeholder="Search country..."
+                value={countryQuery}
+                onChange={e => setCountryQuery(e.target.value)}
+              />
+              <select
+                required
+                className="input auth-input"
+                value={countryCode}
+                onChange={e => setCountryCode(e.target.value)}
+              >
+                {countrySelectOptions.map(opt => (
+                  <option key={opt.code} value={opt.code}>{opt.label}</option>
+                ))}
+              </select>
+              <p className="mt-2 text-xs text-muted">Selected country code: <strong>{countryCode}</strong></p>
+              <p className="mt-1 text-xs text-muted">This country selection is permanent after account creation.</p>
+            </div>
+
+            <div>
+              <label className="label">Birth date</label>
+              <input
+                required
+                type="date"
+                className="input auth-input"
+                value={birthDate}
+                onChange={e => setBirthDate(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <label className="label">Gender</label>
+              <select
+                className="input auth-input"
+                value={gender}
+                onChange={e => setGender(Number(e.target.value))}
+              >
+                {genderOptions.map(opt => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
+            </div>
+
+            {error && (
+              <div className="auth-col-span-2 auth-error">
+                {error}
+              </div>
+            )}
+
+            <div className="auth-col-span-2 auth-actions">
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="btn-primary w-full sm:w-auto"
+              >
+                {isSubmitting ? 'Signing up...' : 'Sign up'}
+              </button>
+              <div className="text-sm text-muted">
+                Already have an account?{' '}
+                <Link to="/login" className="btn-link">Sign in</Link>
+              </div>
+            </div>
+          </form>
+        </div>
+      </div>
+    </section>
+  )
+}

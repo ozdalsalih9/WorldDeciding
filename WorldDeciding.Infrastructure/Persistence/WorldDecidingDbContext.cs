@@ -38,6 +38,8 @@ public class WorldDecidingDbContext
 
         modelBuilder.ApplyConfiguration(new QuestionStatsDailyConfiguration());
 
+
+
         modelBuilder.Entity<LeaderboardRow>().HasNoKey();
         modelBuilder.Entity<CommentLike>(b =>
         {
@@ -74,6 +76,8 @@ public class WorldDecidingDbContext
 
         modelBuilder.Entity<Vote>(b =>
         {
+            b.ToTable("Votes"); // DB’de zaten Votes var → case fix
+
             b.HasKey(x => x.Id);
 
             b.HasIndex(x => x.QuestionId);
@@ -82,7 +86,7 @@ public class WorldDecidingDbContext
             b.Property(x => x.CountrySource).HasConversion<short>();
             b.Property(x => x.CountryProvider).HasMaxLength(50);
 
-            b.Property(x => x.IpHash).HasMaxLength(64);
+            b.Property(x => x.IpHash).IsRequired().HasMaxLength(64);
 
             // ✅ Tek aktif oy kuralı (User)
             b.HasIndex(v => new { v.QuestionId, v.UserId })
@@ -90,6 +94,11 @@ public class WorldDecidingDbContext
 
             // ✅ IP sadece performans için index (unique değil)
             b.HasIndex(v => new { v.QuestionId, v.IpHash });
+
+            // ✅ Country compare için kritik indexler
+            b.HasIndex(v => new { v.QuestionId, v.CountryCode, v.OptionId });
+            b.HasIndex(v => new { v.QuestionId, v.CountryCode });
+            b.HasIndex(v => new { v.QuestionId, v.OptionId });
         });
 
 

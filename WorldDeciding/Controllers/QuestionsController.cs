@@ -72,7 +72,7 @@ public class QuestionsController : ControllerBase
         await _mediator.Send(new RecordQuestionViewCommand(id), ct);
         return NoContent();
     }
-    [AllowAnonymous]
+    [Authorize]
     [HttpGet("{id:guid}/summary")]
     public async Task<ActionResult<QuestionSummaryDto>> GetSummary(Guid id)
     {

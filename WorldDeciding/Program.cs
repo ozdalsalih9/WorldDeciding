@@ -45,6 +45,10 @@ builder.Services.AddScoped<IRateCounter, RedisRateCounter>();
 // IAppDbContext -> DbContext
 builder.Services.AddScoped<IAppDbContext>(sp => sp.GetRequiredService<WorldDecidingDbContext>());
 
+// tokenlar
+builder.Services.Configure<RefreshCookieOptions>(
+    builder.Configuration.GetSection("RefreshCookie"));
+
 // --- HttpContext ---
 builder.Services.AddHttpContextAccessor();
 
