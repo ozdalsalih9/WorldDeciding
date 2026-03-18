@@ -45,9 +45,41 @@ builder.Services.AddScoped<IRateCounter, RedisRateCounter>();
 // IAppDbContext -> DbContext
 builder.Services.AddScoped<IAppDbContext>(sp => sp.GetRequiredService<WorldDecidingDbContext>());
 
+var corsOrigins = builder.Configuration
+    .GetSection("Cors")
+    .GetSection("AllowedOrigins")
+    .Get<string[]>()?
+    .Where(origin => !string.IsNullOrWhiteSpace(origin))
+    .Select(origin => origin.Trim().TrimEnd('/'))
+    .Distinct(StringComparer.OrdinalIgnoreCase)
+    .ToArray()
+    ?? Array.Empty<string>();
+
+if (corsOrigins.Length == 0)
+{
+    throw new InvalidOperationException(
+        $"Cors:AllowedOrigins is missing or empty for environment '{builder.Environment.EnvironmentName}'.");
+}
+
 // tokenlar
-builder.Services.Configure<RefreshCookieOptions>(
-    builder.Configuration.GetSection("RefreshCookie"));
+builder.Services
+    .AddOptions<RefreshCookieOptions>()
+    .Bind(builder.Configuration.GetSection("RefreshCookie"))
+    .Validate(options => !string.IsNullOrWhiteSpace(options.Name), "RefreshCookie:Name is required.")
+    .Validate(options => !string.IsNullOrWhiteSpace(options.Path) && options.Path.StartsWith('/'),
+        "RefreshCookie:Path must start with '/'.")
+    .Validate(options => options.Days > 0, "RefreshCookie:Days must be greater than zero.")
+    .Validate(options =>
+    {
+        var sameSite = options.SameSite?.Trim().ToLowerInvariant();
+        return sameSite is "lax" or "strict" or "none";
+    }, "RefreshCookie:SameSite must be one of Lax, Strict, or None.")
+    .Validate(options =>
+        !string.Equals(options.SameSite, "None", StringComparison.OrdinalIgnoreCase) || options.Secure,
+        "RefreshCookie:Secure must be true when SameSite=None.")
+    .Validate(options => builder.Environment.IsDevelopment() || options.Secure,
+        "RefreshCookie:Secure must be true outside Development.")
+    .ValidateOnStart();
 
 // --- HttpContext ---
 builder.Services.AddHttpContextAccessor();
@@ -70,7 +102,10 @@ builder.Services.AddIdentityCore<AppUser>(opt =>
 
 // --- Authentication / JWT ---
 var jwt = builder.Configuration.GetSection("Jwt");
-var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwt["Key"]!));
+var jwtIssuer = RequireConfig(jwt["Issuer"], "Jwt:Issuer", builder.Environment.EnvironmentName);
+var jwtAudience = RequireConfig(jwt["Audience"], "Jwt:Audience", builder.Environment.EnvironmentName);
+var jwtKey = RequireConfig(jwt["Key"], "Jwt:Key", builder.Environment.EnvironmentName);
+var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey));
 
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -81,8 +116,8 @@ builder.Services
             ValidateIssuer = true,
             ValidateAudience = true,
             ValidateIssuerSigningKey = true,
-            ValidIssuer = jwt["Issuer"],
-            ValidAudience = jwt["Audience"],
+            ValidIssuer = jwtIssuer,
+            ValidAudience = jwtAudience,
             IssuerSigningKey = key,
             ClockSkew = TimeSpan.FromSeconds(30)
         };
@@ -172,7 +207,7 @@ builder.Services.AddScoped<IRefreshTokenService, RefreshTokenService>();
 
 // --- CORS ---
 builder.Services.AddCors(o => o.AddPolicy("frontend", p => p
-    .WithOrigins("http://localhost:5173")
+    .WithOrigins(corsOrigins)
     .AllowAnyHeader()
     .AllowAnyMethod()
     .AllowCredentials()));
@@ -259,3 +294,15 @@ using (var scope = app.Services.CreateScope())
 }
 
 app.Run();
+
+static string RequireConfig(string? value, string key, string environmentName)
+{
+    if (!string.IsNullOrWhiteSpace(value))
+    {
+        return value;
+    }
+
+    throw new InvalidOperationException(
+        $"Missing configuration: {key}. Environment={environmentName}. " +
+        "Set it in appsettings, environment variables, or user secrets.");
+}

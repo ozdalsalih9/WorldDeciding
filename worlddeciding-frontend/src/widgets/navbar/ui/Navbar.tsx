@@ -42,7 +42,7 @@ export default function Navbar() {
                   <Link to="/profile" className="global-nav-cta">Profile</Link>
                   <button
                     onClick={() => {
-                      logout()
+                      void logout()
                       toast.info('Signed out.')
                     }}
                     className="global-nav-cta global-nav-cta-strong"
@@ -93,7 +93,7 @@ export default function Navbar() {
                     <Link to="/profile" className="global-nav-cta" onClick={() => setIsOpen(false)}>Profile</Link>
                     <button
                       onClick={() => {
-                        logout()
+                        void logout()
                         toast.info('Signed out.')
                         setIsOpen(false)
                       }}

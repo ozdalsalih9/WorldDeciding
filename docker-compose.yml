@@ -41,6 +41,12 @@
       Privacy__IpSalt: ${PRIVACY_IPSALT:?Set PRIVACY_IPSALT in .env}
       ConnectionStrings__Default: Host=postgres;Port=5432;Database=${POSTGRES_DB:-worlddeciding};Username=${POSTGRES_USER:-worlddeciding};Password=${POSTGRES_PASSWORD}
       Redis__Configuration: redis:6379
+      Frontend__BaseUrl: ${FRONTEND_BASE_URL:-https://worlddeciding.com}
+      Api__BaseUrl: ${API_BASE_URL:-https://worlddeciding.com}
+      Cors__AllowedOrigins__0: ${CORS_ALLOWED_ORIGIN_0:-https://worlddeciding.com}
+      Cors__AllowedOrigins__1: ${CORS_ALLOWED_ORIGIN_1:-https://www.worlddeciding.com}
+      RefreshCookie__Secure: true
+      RefreshCookie__SameSite: None
     ports:
       - "8080:8080"
     depends_on:

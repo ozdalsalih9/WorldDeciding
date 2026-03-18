@@ -441,7 +441,8 @@ public class AuthController : ControllerBase
     {
         var url = cfg["Frontend:BaseUrl"]?.Trim().TrimEnd('/');
         if (string.IsNullOrWhiteSpace(url))
-            throw new InvalidOperationException("Missing configuration: Frontend:BaseUrl");
+            throw new InvalidOperationException(
+                "Missing configuration: Frontend:BaseUrl. Set it in appsettings or environment variables.");
 
         return url;
     }
@@ -450,7 +451,8 @@ public class AuthController : ControllerBase
     {
         var url = cfg["Api:BaseUrl"]?.Trim().TrimEnd('/');
         if (string.IsNullOrWhiteSpace(url))
-            throw new InvalidOperationException("Missing configuration: Api:BaseUrl");
+            throw new InvalidOperationException(
+                "Missing configuration: Api:BaseUrl. Set it in appsettings or environment variables.");
 
         return url;
     }
@@ -550,34 +552,33 @@ public class AuthController : ControllerBase
 
     private void AppendRefreshTokenCookie(string refreshToken)
     {
-        var sameSite = ParseSameSite(_refreshCookieOptions.SameSite);
+        var cookieOptions = BuildRefreshCookieOptions();
+        cookieOptions.Expires = DateTimeOffset.UtcNow.AddDays(_refreshCookieOptions.Days);
+        cookieOptions.MaxAge = TimeSpan.FromDays(_refreshCookieOptions.Days);
 
         Response.Cookies.Append(
             _refreshCookieOptions.Name,
             refreshToken,
-            new CookieOptions
-            {
-                HttpOnly = _refreshCookieOptions.HttpOnly,
-                Secure = _refreshCookieOptions.Secure,
-                SameSite = sameSite,
-                Path = _refreshCookieOptions.Path,
-                Expires = DateTimeOffset.UtcNow.AddDays(_refreshCookieOptions.Days)
-            });
+            cookieOptions);
     }
 
     private void DeleteRefreshTokenCookie()
     {
-        var sameSite = ParseSameSite(_refreshCookieOptions.SameSite);
-
         Response.Cookies.Delete(
             _refreshCookieOptions.Name,
-            new CookieOptions
-            {
-                HttpOnly = _refreshCookieOptions.HttpOnly,
-                Secure = _refreshCookieOptions.Secure,
-                SameSite = sameSite,
-                Path = _refreshCookieOptions.Path
-            });
+            BuildRefreshCookieOptions());
+    }
+
+    private CookieOptions BuildRefreshCookieOptions()
+    {
+        return new CookieOptions
+        {
+            HttpOnly = _refreshCookieOptions.HttpOnly,
+            Secure = _refreshCookieOptions.Secure,
+            SameSite = ParseSameSite(_refreshCookieOptions.SameSite),
+            Path = _refreshCookieOptions.Path,
+            IsEssential = true
+        };
     }
 
     private static SameSiteMode ParseSameSite(string? value)

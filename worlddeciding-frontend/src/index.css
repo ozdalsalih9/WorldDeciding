@@ -47,7 +47,7 @@
 }
 
 @layer components {
-  .container-page { @apply max-w-6xl mx-auto px-4; }
+  .container-page { @apply max-w-6xl mx-auto px-2.5 sm:px-4; }
   .card {
     @apply rounded-2xl backdrop-blur-xl;
     background: var(--panel);
@@ -675,7 +675,7 @@
   }
 
   .home-wow-grid {
-    padding: 18px;
+    padding: 16px;
     gap: 16px;
   }
 

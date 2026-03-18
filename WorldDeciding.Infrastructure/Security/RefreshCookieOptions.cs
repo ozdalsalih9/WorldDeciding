@@ -12,7 +12,7 @@ namespace WorldDeciding.Infrastructure.Security
         public string Path { get; set; } = "/api/auth/refresh";
         public int Days { get; set; } = 30;
         public bool HttpOnly { get; set; } = true;
-        public bool Secure { get; set; } = false; // dev'de false, prod'da true
-        public string SameSite { get; set; } = "Lax"; // prod subdomain senaryosunda None olabilir
+        public bool Secure { get; set; } = true;
+        public string SameSite { get; set; } = "None";
     }
 }

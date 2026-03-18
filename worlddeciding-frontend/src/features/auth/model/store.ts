@@ -18,7 +18,7 @@ type AuthState = {
     newPassword: string
     confirmNewPassword: string
   }) => Promise<void>
-  logout: () => void
+  logout: () => Promise<void>
   register: (payload: {
     email: string
     password: string
@@ -126,6 +126,21 @@ function mapLoginError(error: any): string {
 
 let hydrateSessionPromise: Promise<void> | null = null
 
+function createSignedOutState(): Pick<AuthState, 'token' | 'roles' | 'isAuthenticated' | 'isAdmin' | 'isAuthHydrated'> {
+  setAccessToken(null)
+  return {
+    token: null,
+    roles: [],
+    isAuthenticated: false,
+    isAdmin: false,
+    isAuthHydrated: true,
+  }
+}
+
+function clearAuthState(set: (partial: Partial<AuthState>) => void) {
+  set(createSignedOutState())
+}
+
 const useAuth = create<AuthState>((set, get) => ({
   token: null,
   roles: [],
@@ -153,14 +168,7 @@ const useAuth = create<AuthState>((set, get) => ({
           isAuthHydrated: true,
         })
       } catch {
-        setAccessToken(null)
-        set({
-          token: null,
-          roles: [],
-          isAuthenticated: false,
-          isAdmin: false,
-          isAuthHydrated: true,
-        })
+        set(createSignedOutState())
       } finally {
         hydrateSessionPromise = null
       }
@@ -237,15 +245,12 @@ const useAuth = create<AuthState>((set, get) => ({
     }
   },
 
-  logout: () => {
-    setAccessToken(null)
-    set({
-      token: null,
-      roles: [],
-      isAuthenticated: false,
-      isAdmin: false,
-      isAuthHydrated: true,
-    })
+  logout: async () => {
+    try {
+      await api.post('/api/auth/logout', undefined, { withCredentials: true })
+    } finally {
+      clearAuthState(set)
+    }
   },
 }))
 
