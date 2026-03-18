@@ -128,22 +128,16 @@ public class AuthController : ControllerBase
         var token = await _users.GenerateEmailConfirmationTokenAsync(user);
         var encodedToken = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(token));
 
-        var frontendBaseUrl = cfg["Frontend:BaseUrl"] ?? "http://localhost:5173";
-        var confirmUrl = $"{frontendBaseUrl}/verify-email?userId={user.Id}&token={encodedToken}";
+        var apiBaseUrl = GetApiBaseUrl(cfg);
+        var confirmUrl =
+            $"{apiBaseUrl}/api/auth/confirm-email?userId={Uri.EscapeDataString(user.Id.ToString())}&token={Uri.EscapeDataString(encodedToken)}";
 
         try
         {
             await emailSender.SendAsync(
                 user.Email!,
                 "Confirm your WorldDeciding account",
-                $"""
-                <div style="font-family: Arial, sans-serif; line-height: 1.5;">
-                  <h2>Welcome to WorldDeciding 👋</h2>
-                  <p>To activate your account, please confirm your email:</p>
-                  <p><a href="{confirmUrl}">Confirm Email</a></p>
-                  <p>If you didn’t create this account, you can ignore this email.</p>
-                </div>
-                """);
+                BuildConfirmEmailHtml(confirmUrl));
         }
         catch
         {
@@ -161,7 +155,7 @@ public class AuthController : ControllerBase
         [FromQuery] string token,
         CancellationToken ct)
     {
-        var feBase = (_cfg["Frontend:BaseUrl"] ?? "http://localhost:5173").TrimEnd('/');
+        var feBase = GetFrontendBaseUrl(_cfg);
 
         string FrontendUrl(string status, string message)
             => $"{feBase}/email-confirmed?status={Uri.EscapeDataString(status)}&message={Uri.EscapeDataString(message)}";
@@ -232,8 +226,9 @@ public class AuthController : ControllerBase
         var token = await _users.GeneratePasswordResetTokenAsync(user);
         var encodedToken = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(token));
 
-        var frontendBaseUrl = cfg["Frontend:BaseUrl"] ?? "http://localhost:5173";
-        var resetUrl = $"{frontendBaseUrl}/reset-password?email={Uri.EscapeDataString(req.Email)}&token={encodedToken}";
+        var frontendBaseUrl = GetFrontendBaseUrl(cfg);
+        var resetUrl =
+            $"{frontendBaseUrl}/reset-password?email={Uri.EscapeDataString(req.Email)}&token={Uri.EscapeDataString(encodedToken)}";
 
         try
         {
@@ -343,15 +338,12 @@ public class AuthController : ControllerBase
         var token = await _users.GenerateEmailConfirmationTokenAsync(user);
         var encodedToken = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(token));
 
-        var apiBase = cfg["Api:BaseUrl"] ?? "https://localhost:7200";
-        var link = $"{apiBase.TrimEnd('/')}/api/auth/confirm-email?userId={user.Id}&token={encodedToken}";
+        var apiBase = GetApiBaseUrl(cfg);
+        var link =
+            $"{apiBase}/api/auth/confirm-email?userId={Uri.EscapeDataString(user.Id.ToString())}&token={Uri.EscapeDataString(encodedToken)}";
 
-        var subject = "Confirm your email";
-        var html = $@"
-<p>Confirm your email by clicking the link below:</p>
-<p><a href=""{link}"">Confirm Email</a></p>
-<p>If you didn't request this, you can ignore this email.</p>
-";
+        var subject = "Confirm your WorldDeciding account";
+        var html = BuildConfirmEmailHtml(link);
 
         try
         {
@@ -444,6 +436,78 @@ public class AuthController : ControllerBase
     }
 
     // ==== Helpers ====
+
+    private static string GetFrontendBaseUrl(IConfiguration cfg)
+    {
+        var url = cfg["Frontend:BaseUrl"]?.Trim().TrimEnd('/');
+        if (string.IsNullOrWhiteSpace(url))
+            throw new InvalidOperationException("Missing configuration: Frontend:BaseUrl");
+
+        return url;
+    }
+
+    private static string GetApiBaseUrl(IConfiguration cfg)
+    {
+        var url = cfg["Api:BaseUrl"]?.Trim().TrimEnd('/');
+        if (string.IsNullOrWhiteSpace(url))
+            throw new InvalidOperationException("Missing configuration: Api:BaseUrl");
+
+        return url;
+    }
+
+    private static string BuildConfirmEmailHtml(string confirmUrl)
+    {
+        return $"""
+    <!doctype html>
+    <html lang="en">
+    <head>
+      <meta charset="utf-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <title>Confirm your email</title>
+    </head>
+    <body style="margin:0;padding:0;background:#f4f7fb;font-family:Arial,Helvetica,sans-serif;color:#111827;">
+      <div style="max-width:640px;margin:0 auto;padding:32px 16px;">
+        <div style="background:#ffffff;border-radius:18px;padding:40px 32px;box-shadow:0 10px 30px rgba(0,0,0,0.08);">
+          <div style="text-align:center;margin-bottom:24px;">
+            <div style="display:inline-block;padding:10px 16px;border-radius:999px;background:#eef2ff;color:#4338ca;font-weight:700;font-size:13px;letter-spacing:.3px;">
+              WorldDeciding
+            </div>
+          </div>
+
+          <h1 style="margin:0 0 12px;font-size:28px;line-height:1.25;color:#111827;text-align:center;">
+            Confirm your email
+          </h1>
+
+          <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#4b5563;text-align:center;">
+            Welcome! Please confirm your email address to activate your account and start using WorldDeciding.
+          </p>
+
+          <div style="text-align:center;margin:32px 0;">
+            <a href="{confirmUrl}"
+               style="display:inline-block;background:#111827;color:#ffffff;text-decoration:none;font-weight:700;font-size:16px;padding:14px 24px;border-radius:12px;">
+              Confirm Email
+            </a>
+          </div>
+
+          <p style="margin:0 0 10px;font-size:14px;line-height:1.7;color:#6b7280;">
+            If the button does not work, copy and paste this link into your browser:
+          </p>
+
+          <p style="margin:0 0 24px;font-size:13px;line-height:1.8;word-break:break-all;color:#374151;background:#f9fafb;border:1px solid #e5e7eb;border-radius:12px;padding:14px;">
+            {confirmUrl}
+          </p>
+
+          <hr style="border:none;border-top:1px solid #e5e7eb;margin:28px 0;" />
+
+          <p style="margin:0;font-size:13px;line-height:1.7;color:#9ca3af;text-align:center;">
+            If you didn’t create this account, you can safely ignore this email.
+          </p>
+        </div>
+      </div>
+    </body>
+    </html>
+    """;
+    }
 
     private Task<string> GenerateJwtAsync(AppUser user, string[] roles)
     {
