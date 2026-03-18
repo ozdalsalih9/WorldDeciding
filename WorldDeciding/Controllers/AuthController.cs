@@ -147,9 +147,7 @@ public class AuthController : ControllerBase
         var token = await _users.GenerateEmailConfirmationTokenAsync(user);
         var encodedToken = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(token));
 
-        var apiBaseUrl = GetApiBaseUrl(cfg);
-        var confirmUrl =
-            $"{apiBaseUrl}/api/auth/confirm-email?userId={Uri.EscapeDataString(user.Id.ToString())}&token={Uri.EscapeDataString(encodedToken)}";
+        var confirmUrl = BuildFrontendConfirmEmailUrl(cfg, user.Id, encodedToken);
 
         try
         {
@@ -165,6 +163,37 @@ public class AuthController : ControllerBase
         }
 
         return Ok(new { message = "Registration successful. Please check your email to confirm your account." });
+    }
+
+    [HttpPost("confirm-email")]
+    [AllowAnonymous]
+    public async Task<IActionResult> ConfirmEmail([FromBody] ConfirmEmailReq req, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(req.UserId) || string.IsNullOrWhiteSpace(req.Token))
+            return BadRequest(new { message = "Missing userId or token." });
+
+        var user = await _users.FindByIdAsync(req.UserId);
+        if (user is null)
+            return BadRequest(new { message = "Invalid user." });
+
+        string decodedToken;
+        try
+        {
+            decodedToken = Encoding.UTF8.GetString(WebEncoders.Base64UrlDecode(req.Token));
+        }
+        catch
+        {
+            return BadRequest(new { message = "Invalid token format." });
+        }
+
+        var result = await _users.ConfirmEmailAsync(user, decodedToken);
+        if (!result.Succeeded)
+        {
+            var message = string.Join(" | ", result.Errors.Select(e => e.Description));
+            return BadRequest(new { message = string.IsNullOrWhiteSpace(message) ? "Email confirmation failed." : message });
+        }
+
+        return Ok(new { message = "Email confirmed. You can now sign in." });
     }
 
     [HttpGet("confirm-email")]
@@ -357,9 +386,7 @@ public class AuthController : ControllerBase
         var token = await _users.GenerateEmailConfirmationTokenAsync(user);
         var encodedToken = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(token));
 
-        var apiBase = GetApiBaseUrl(cfg);
-        var link =
-            $"{apiBase}/api/auth/confirm-email?userId={Uri.EscapeDataString(user.Id.ToString())}&token={Uri.EscapeDataString(encodedToken)}";
+        var link = BuildFrontendConfirmEmailUrl(cfg, user.Id, encodedToken);
 
         var subject = "Confirm your WorldDeciding account";
         var html = BuildConfirmEmailHtml(link);
@@ -474,6 +501,12 @@ public class AuthController : ControllerBase
                 "Missing configuration: Api:BaseUrl. Set it in appsettings or environment variables.");
 
         return url;
+    }
+
+    private static string BuildFrontendConfirmEmailUrl(IConfiguration cfg, Guid userId, string encodedToken)
+    {
+        var frontendBaseUrl = GetFrontendBaseUrl(cfg);
+        return $"{frontendBaseUrl}/confirm-email?userId={Uri.EscapeDataString(userId.ToString())}&token={Uri.EscapeDataString(encodedToken)}";
     }
 
     private static string BuildConfirmEmailHtml(string confirmUrl)

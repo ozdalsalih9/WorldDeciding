@@ -1,6 +1,7 @@
 ﻿using Microsoft.Extensions.Options;
 using System.Net;
 using System.Net.Mail;
+using System.Text.RegularExpressions;
 using System.Text;
 using WorldDeciding.Application.Common.Interfaces;
 
@@ -34,10 +35,19 @@ public class SmtpEmailSender : IEmailSender
             From = new MailAddress(fromAddr.Address, fromName, Encoding.UTF8),
             Subject = subject ?? "",
             Body = htmlBody ?? "",
-            IsBodyHtml = true
+            IsBodyHtml = true,
+            BodyEncoding = Encoding.UTF8,
+            SubjectEncoding = Encoding.UTF8
         };
 
         message.To.Add(toAddr);
+        message.ReplyToList.Add(new MailAddress(fromAddr.Address, fromName, Encoding.UTF8));
+        message.Headers.Add("X-Auto-Response-Suppress", "All");
+        message.AlternateViews.Add(
+            AlternateView.CreateAlternateViewFromString(
+                BuildPlainTextBody(htmlBody),
+                Encoding.UTF8,
+                "text/plain"));
 
         using var client = new SmtpClient((_options.Host ?? "").Trim(), _options.Port)
         {
@@ -46,5 +56,20 @@ public class SmtpEmailSender : IEmailSender
         };
 
         await client.SendMailAsync(message, ct);
+    }
+
+    private static string BuildPlainTextBody(string? htmlBody)
+    {
+        if (string.IsNullOrWhiteSpace(htmlBody))
+        {
+            return string.Empty;
+        }
+
+        var text = Regex.Replace(htmlBody, "<br\\s*/?>", "\n", RegexOptions.IgnoreCase);
+        text = Regex.Replace(text, "</p\\s*>", "\n\n", RegexOptions.IgnoreCase);
+        text = Regex.Replace(text, "<[^>]+>", string.Empty);
+        text = WebUtility.HtmlDecode(text);
+        text = Regex.Replace(text, @"\n{3,}", "\n\n");
+        return text.Trim();
     }
 }
