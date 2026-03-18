@@ -6,13 +6,16 @@ import countriesGeoJsonRaw from '@/data/countries.geojson?raw'
 
 type CountryDatum = { countryCode: string; count: number; percentage: number }
 type MarkerPoint = CountryDatum & { coord: { lat: number; lng: number } }
+type CountryFeature = {
+  id?: string
+  properties?: { name?: string | null } | null
+  geometry:
+    | { type: 'Polygon'; coordinates: number[][][] }
+    | { type: 'MultiPolygon'; coordinates: number[][][][] }
+    | null
+}
 type CountryFeatureCollection = {
-  features: Array<{
-    geometry:
-      | { type: 'Polygon'; coordinates: number[][][] }
-      | { type: 'MultiPolygon'; coordinates: number[][][][] }
-      | null
-  }>
+  features: CountryFeature[]
 }
 
 const COUNTRY_COORDS: Record<string, { lat: number; lng: number }> = {
@@ -23,8 +26,7 @@ const COUNTRY_COORDS: Record<string, { lat: number; lng: number }> = {
   DE: { lat: 51, lng: 9 },
   IT: { lat: 42.5, lng: 12.5 },
   ES: { lat: 40, lng: -4 },
-  TR: { lat: 37.3, lng: 35.2 },
-  TM: { lat: 39.1, lng: 59.4 },
+  TR: { lat: 39, lng: 35 },
   RU: { lat: 60, lng: 90 },
   CN: { lat: 35, lng: 103 },
   JP: { lat: 36, lng: 138 },
@@ -68,6 +70,31 @@ const COUNTRY_COORDS: Record<string, { lat: number; lng: number }> = {
   CL: { lat: -30, lng: -71 },
 }
 
+const COUNTRY_NAME_ALIASES: Record<string, string[]> = {
+  TR: ['Turkey', 'Turkiye', 'Türkiye'],
+  US: ['United States', 'United States of America', 'USA'],
+  GB: ['United Kingdom', 'Great Britain', 'UK'],
+  RU: ['Russia', 'Russian Federation'],
+  CZ: ['Czechia', 'Czech Republic'],
+  KR: ['South Korea', 'Republic of Korea', 'Korea, Republic of'],
+  KP: ['North Korea', "Democratic People's Republic of Korea"],
+  VN: ['Vietnam', 'Viet Nam'],
+  CI: ["Cote d'Ivoire", "Côte d'Ivoire", 'Ivory Coast'],
+  CD: ['Democratic Republic of the Congo', 'Congo (Kinshasa)'],
+  CG: ['Republic of the Congo', 'Congo (Brazzaville)', 'Congo'],
+  IR: ['Iran', 'Iran, Islamic Republic of'],
+  SY: ['Syria', 'Syrian Arab Republic'],
+  TZ: ['Tanzania', 'United Republic of Tanzania'],
+  LA: ['Laos', "Lao People's Democratic Republic"],
+  MD: ['Moldova', 'Republic of Moldova'],
+  VE: ['Venezuela', 'Venezuela, Bolivarian Republic of'],
+  BO: ['Bolivia', 'Bolivia, Plurinational State of'],
+  BN: ['Brunei', 'Brunei Darussalam'],
+  PS: ['Palestine', 'State of Palestine'],
+  TW: ['Taiwan', 'Taiwan, Province of China'],
+  MK: ['North Macedonia', 'Macedonia'],
+}
+
 function latLngToVector3(lat: number, lng: number, radius: number) {
   const phi = (90 - lat) * (Math.PI / 180)
   const theta = (lng + 180) * (Math.PI / 180)
@@ -88,10 +115,30 @@ export default function CountryGlobe({ data }: Props) {
   const controlsRef = useRef<OrbitControls | null>(null)
   const animationRef = useRef<number | null>(null)
 
+  const regionDisplayNames = useMemo(() => {
+    try {
+      return new Intl.DisplayNames(['en'], { type: 'region' })
+    } catch {
+      return null
+    }
+  }, [])
+
   const countryFeatures = useMemo(
     () => JSON.parse(countriesGeoJsonRaw) as CountryFeatureCollection,
     []
   )
+
+  const featureCentroidsByName = useMemo(() => {
+    const entries = new Map<string, { lat: number; lng: number }>()
+    countryFeatures.features.forEach(feature => {
+      const name = feature.properties?.name?.trim()
+      if (!name || !feature.geometry) return
+      const centroid = computeFeatureCentroid(feature.geometry)
+      if (!centroid) return
+      entries.set(normalizeCountryName(name), centroid)
+    })
+    return entries
+  }, [countryFeatures])
 
   const boundaryPositions = useMemo(() => {
     const positions: number[] = []
@@ -124,11 +171,12 @@ export default function CountryGlobe({ data }: Props) {
         const code = d.countryCode.trim().toUpperCase()
         return {
           ...d,
-          coord: COUNTRY_COORDS[code],
+          countryCode: code,
+          coord: resolveCountryCoord(code, featureCentroidsByName, regionDisplayNames),
         }
       })
       .filter((d): d is MarkerPoint => Boolean(d.coord))
-  }, [data])
+  }, [data, featureCentroidsByName, regionDisplayNames])
 
   useEffect(() => {
     const mount = mountRef.current
@@ -360,7 +408,6 @@ export default function CountryGlobe({ data }: Props) {
     const scene = sceneRef.current
     if (!scene) return
 
-    // Remove old markers
     if (markersRef.current) {
       scene.remove(markersRef.current)
       disposeMarkerGroup(markersRef.current)
@@ -378,7 +425,6 @@ export default function CountryGlobe({ data }: Props) {
     const isCompactViewport =
       typeof window !== 'undefined' &&
       (window.matchMedia('(pointer: coarse)').matches || window.matchMedia('(max-width: 1200px)').matches)
-    const labelLimit = markerPoints.length > 14 ? 3 : markerPoints.length > 8 ? 4 : isCompactViewport ? 4 : 6
 
     markerPoints.forEach((pt, index) => {
       const { lat, lng } = pt.coord
@@ -416,23 +462,33 @@ export default function CountryGlobe({ data }: Props) {
 
       markerGroup.add(ring, glow)
 
-      if (index < labelLimit) {
-        const label = createLabelSprite(pt.countryCode.toUpperCase(), Math.round(pt.percentage), color)
-        const tangent = new THREE.Vector3().crossVectors(worldUp, normal)
-        if (tangent.lengthSq() < 0.0001) tangent.set(1, 0, 0)
-        tangent.normalize()
-        const bitangent = new THREE.Vector3().crossVectors(normal, tangent).normalize()
-        const radialDistance = 15 + (index % 3) * 0.28
-        const lateralOffset = (markerPoints.length > 6 ? 0.34 : 0.22) * (index % 2 === 0 ? 1 : -1)
-        const verticalOffset = index % 3 === 0 ? 0.1 : index % 3 === 1 ? -0.08 : 0.04
-        label.position
-          .copy(normal.clone().multiplyScalar(radialDistance))
-          .add(tangent.multiplyScalar(lateralOffset))
-          .add(bitangent.multiplyScalar(verticalOffset))
-        const labelScale = 0.82 + strength * 0.14
-        label.scale.multiplyScalar(labelScale)
-        markerGroup.add(label)
-      }
+      const label = createLabelSprite(
+        pt.countryCode.toUpperCase(),
+        Math.round(pt.percentage),
+        color,
+        markerPoints.length,
+        isCompactViewport
+      )
+      const tangent = new THREE.Vector3().crossVectors(worldUp, normal)
+      if (tangent.lengthSq() < 0.0001) tangent.set(1, 0, 0)
+      tangent.normalize()
+      const bitangent = new THREE.Vector3().crossVectors(normal, tangent).normalize()
+      const ringIndex = index % 4
+      const radialDistance = 15 + ringIndex * 0.24
+      const lateralOffset = (markerPoints.length > 10 ? 0.28 : 0.18) * (index % 2 === 0 ? 1 : -1)
+      const verticalOffset = ((index % 3) - 1) * (markerPoints.length > 12 ? 0.14 : 0.09)
+      label.position
+        .copy(normal.clone().multiplyScalar(radialDistance))
+        .add(tangent.multiplyScalar(lateralOffset))
+        .add(bitangent.multiplyScalar(verticalOffset))
+      const labelScale =
+        markerPoints.length > 18
+          ? 0.68 + strength * 0.08
+          : markerPoints.length > 10
+            ? 0.76 + strength * 0.1
+            : 0.84 + strength * 0.12
+      label.scale.multiplyScalar(labelScale)
+      markerGroup.add(label)
     })
 
     markersRef.current = markerGroup
@@ -456,6 +512,77 @@ export default function CountryGlobe({ data }: Props) {
       </div>
     </div>
   )
+}
+
+function resolveCountryCoord(
+  countryCode: string,
+  featureCentroidsByName: Map<string, { lat: number; lng: number }>,
+  regionDisplayNames: Intl.DisplayNames | null
+) {
+  const normalizedCode = countryCode.trim().toUpperCase()
+  if (!normalizedCode) return undefined
+
+  const displayName = regionDisplayNames?.of(normalizedCode) ?? null
+  const lookupNames = [
+    ...(displayName ? [displayName] : []),
+    ...(COUNTRY_NAME_ALIASES[normalizedCode] ?? []),
+  ]
+
+  for (const name of lookupNames) {
+    const coord = featureCentroidsByName.get(normalizeCountryName(name))
+    if (coord) {
+      return coord
+    }
+  }
+
+  return COUNTRY_COORDS[normalizedCode]
+}
+
+function normalizeCountryName(name: string) {
+  return name
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/&/g, 'and')
+    .replace(/[()'’.]/g, '')
+    .replace(/-/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase()
+}
+
+function computeFeatureCentroid(
+  geometry: CountryFeature['geometry']
+): { lat: number; lng: number } | null {
+  if (!geometry) return null
+
+  let minLat = Number.POSITIVE_INFINITY
+  let maxLat = Number.NEGATIVE_INFINITY
+  let minLng = Number.POSITIVE_INFINITY
+  let maxLng = Number.NEGATIVE_INFINITY
+  let found = false
+
+  const includePoint = (lng: number, lat: number) => {
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return
+    minLat = Math.min(minLat, lat)
+    maxLat = Math.max(maxLat, lat)
+    minLng = Math.min(minLng, lng)
+    maxLng = Math.max(maxLng, lng)
+    found = true
+  }
+
+  if (geometry.type === 'Polygon') {
+    geometry.coordinates.forEach(ring => ring.forEach(([lng, lat]) => includePoint(lng, lat)))
+  } else if (geometry.type === 'MultiPolygon') {
+    geometry.coordinates.forEach(polygon =>
+      polygon.forEach(ring => ring.forEach(([lng, lat]) => includePoint(lng, lat)))
+    )
+  }
+
+  if (!found) return null
+  return {
+    lat: (minLat + maxLat) / 2,
+    lng: (minLng + maxLng) / 2,
+  }
 }
 
 function createLandMaskTexture(features: CountryFeatureCollection) {
@@ -553,12 +680,18 @@ function createGlowTexture() {
   return texture
 }
 
-function createLabelSprite(countryCode: string, percentage: number, color: Color) {
-  const paddingX = 12
-  const paddingY = 8
-  const codeFontSize = 18
-  const percentFontSize = 13
-  const lineGap = 4
+function createLabelSprite(
+  countryCode: string,
+  percentage: number,
+  color: Color,
+  markerCount: number,
+  isCompactViewport: boolean
+) {
+  const paddingX = markerCount > 16 ? 10 : 12
+  const paddingY = markerCount > 16 ? 7 : 8
+  const codeFontSize = markerCount > 16 ? 15 : markerCount > 10 ? 16 : 18
+  const percentFontSize = markerCount > 16 ? 11 : 13
+  const lineGap = markerCount > 16 ? 3 : 4
   const canvas = document.createElement('canvas')
   const ctx = canvas.getContext('2d')!
   const percentText = `${percentage}%`
@@ -567,7 +700,8 @@ function createLabelSprite(countryCode: string, percentage: number, color: Color
   ctx.font = `600 ${percentFontSize}px "Space Grotesk", sans-serif`
   const percentWidth = Math.ceil(ctx.measureText(percentText).width)
   const contentWidth = Math.max(codeWidth, percentWidth)
-  const width = Math.max(78, contentWidth + paddingX * 2)
+  const minWidth = isCompactViewport ? 68 : 78
+  const width = Math.max(minWidth, contentWidth + paddingX * 2)
   const height = codeFontSize + percentFontSize + lineGap + paddingY * 2
   canvas.width = width
   canvas.height = height

@@ -5351,6 +5351,16 @@
   background: rgba(251, 253, 255, 0.95);
 }
 
+.auth-country-list {
+  min-height: 240px;
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
+.auth-country-list option {
+  padding: 8px 10px;
+}
+
 .auth-error {
   border-radius: 12px;
   border: 1px solid rgba(244, 63, 94, 0.28);
@@ -5402,6 +5412,10 @@
 
   .auth-col-span-2 {
     grid-column: auto;
+  }
+
+  .auth-country-list {
+    min-height: 208px;
   }
 }
 
