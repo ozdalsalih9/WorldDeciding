@@ -90,8 +90,29 @@ public class AuthController : ControllerBase
     public record ForgotPasswordReq(string Email);
     public record ResetPasswordReq(string Email, string Token, string NewPassword, string ConfirmNewPassword);
     public record ResendConfirmationReq(string Email);
+    public record RegisterCountryRes(
+        string? CountryCode,
+        bool EnforceCountryMatch,
+        double Confidence,
+        string Provider
+    );
 
     // ==== Endpoints ====
+
+    [HttpGet("register-country")]
+    [AllowAnonymous]
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
+    public async Task<ActionResult<RegisterCountryRes>> GetRegisterCountry(CancellationToken ct)
+    {
+        var enforcement = IsRegisterCountryMatchEnforced();
+        var resolved = await ResolveCurrentCountryAsync(ct);
+
+        return Ok(new RegisterCountryRes(
+            resolved.countryCode,
+            enforcement,
+            resolved.confidence,
+            resolved.provider));
+    }
 
     [HttpPost("register")]
     [AllowAnonymous]
@@ -616,8 +637,7 @@ public class AuthController : ControllerBase
 
         try
         {
-            var (countryIso2, confidence, provider) = await _geo.ResolveAsync(clientIp, ct);
-            var inferredCountryCode = NormalizeCountryCode(countryIso2);
+            var (inferredCountryCode, confidence, provider) = await ResolveCurrentCountryAsync(ct);
             var minimumConfidence = GetRegisterCountryMinimumConfidence();
 
             if (inferredCountryCode is null)
@@ -664,6 +684,18 @@ public class AuthController : ControllerBase
             _logger.LogWarning(ex, "GeoIP lookup failed during registration country validation for IP {ClientIp}", clientIp);
             return null;
         }
+    }
+
+    private async Task<(string? countryCode, double confidence, string provider)> ResolveCurrentCountryAsync(CancellationToken ct)
+    {
+        var clientIp = _client.ClientIp;
+        if (clientIp is null)
+        {
+            return (null, 0.0, "ClientIpUnavailable");
+        }
+
+        var (countryIso2, confidence, provider) = await _geo.ResolveAsync(clientIp, ct);
+        return (NormalizeCountryCode(countryIso2), confidence, provider);
     }
 
     private bool IsRegisterCountryMatchEnforced()

@@ -1,6 +1,7 @@
-﻿import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import useAuth from '@/features/auth'
+import api, { authNoRefreshConfig } from '@/shared/api/client'
 import { useToast } from '@/shared/ui/toast'
 import worldDecidingLogo from '@/shared/logo/worlddeciding.png'
 
@@ -21,6 +22,13 @@ const passwordRules = [
 type CountryOption = {
   code: string
   label: string
+}
+
+type RegisterCountryResponse = {
+  countryCode?: string | null
+  enforceCountryMatch?: boolean
+  confidence?: number
+  provider?: string
 }
 
 export default function Register() {
@@ -71,14 +79,70 @@ export default function Register() {
   const [countryCode, setCountryCode] = useState('TR')
   const [birthDate, setBirthDate] = useState('')
   const [gender, setGender] = useState(0)
+  const [detectedCountryCode, setDetectedCountryCode] = useState<string | null>(null)
+  const [isCountryMatchRequired, setIsCountryMatchRequired] = useState(false)
+  const [isResolvingCountry, setIsResolvingCountry] = useState(true)
   const [suggestedCountryCode, setSuggestedCountryCode] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [isSubmitting, setSubmitting] = useState(false)
 
+  useEffect(() => {
+    let ignore = false
+
+    const loadRegisterCountry = async () => {
+      setIsResolvingCountry(true)
+      try {
+        const res = await api.get('/api/auth/register-country', authNoRefreshConfig)
+
+        if (ignore) return
+
+        const responseData = (res.data ?? {}) as RegisterCountryResponse
+        const detected = responseData.countryCode?.trim().toUpperCase() || null
+        const enforce = Boolean(responseData.enforceCountryMatch)
+
+        setDetectedCountryCode(detected)
+        setIsCountryMatchRequired(enforce)
+
+        if (detected) {
+          setCountryCode(detected)
+          setSuggestedCountryCode(detected)
+        }
+      } catch {
+        if (!ignore) {
+          setDetectedCountryCode(null)
+          setIsCountryMatchRequired(false)
+        }
+      } finally {
+        if (!ignore) {
+          setIsResolvingCountry(false)
+        }
+      }
+    }
+
+    void loadRegisterCountry()
+
+    return () => {
+      ignore = true
+    }
+  }, [])
+
+  const hasCountryMismatch =
+    isCountryMatchRequired &&
+    !!detectedCountryCode &&
+    countryCode.trim().toUpperCase() !== detectedCountryCode
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
-    setSuggestedCountryCode(null)
+
+    if (hasCountryMismatch && detectedCountryCode) {
+      const mismatchMessage = `Country must match your detected location: ${detectedCountryCode}.`
+      setSuggestedCountryCode(detectedCountryCode)
+      setError(mismatchMessage)
+      toast.error(mismatchMessage)
+      return
+    }
+
     setSubmitting(true)
     try {
       await register({
@@ -96,6 +160,7 @@ export default function Register() {
       if (typeof nextSuggestedCountryCode === 'string' && nextSuggestedCountryCode.length === 2) {
         setCountryCode(nextSuggestedCountryCode)
         setSuggestedCountryCode(nextSuggestedCountryCode)
+        setDetectedCountryCode(nextSuggestedCountryCode)
       }
       setError(msg)
       toast.error(msg)
@@ -162,16 +227,29 @@ export default function Register() {
                 size={10}
                 className="input auth-input auth-country-list"
                 value={countryCode}
-                onChange={e => setCountryCode(e.target.value)}
+                onChange={e => {
+                  setCountryCode(e.target.value)
+                  setError(null)
+                }}
               >
                 {countryOptions.map(opt => (
                   <option key={opt.code} value={opt.code}>{opt.label}</option>
                 ))}
               </select>
               <p className="mt-2 text-xs text-muted">Selected country code: <strong>{countryCode}</strong></p>
+              {isResolvingCountry ? (
+                <p className="mt-1 text-xs text-muted">Detecting your country...</p>
+              ) : detectedCountryCode ? (
+                <p className="mt-1 text-xs text-muted">Detected country: <strong>{detectedCountryCode}</strong></p>
+              ) : null}
               {suggestedCountryCode ? (
                 <p className="mt-1 text-xs font-semibold text-[var(--accent-strong)]">
                   Suggested country: {suggestedCountryCode}
+                </p>
+              ) : null}
+              {hasCountryMismatch && detectedCountryCode ? (
+                <p className="mt-1 text-xs font-semibold text-rose-600">
+                  You can only register with your detected country: {detectedCountryCode}.
                 </p>
               ) : null}
               <p className="mt-1 text-xs text-muted">This country selection is permanent after account creation.</p>
@@ -210,7 +288,7 @@ export default function Register() {
             <div className="auth-col-span-2 auth-actions">
               <button
                 type="submit"
-                disabled={isSubmitting}
+                disabled={isSubmitting || isResolvingCountry || hasCountryMismatch}
                 className="btn-primary w-full sm:w-auto"
               >
                 {isSubmitting ? 'Signing up...' : 'Sign up'}
