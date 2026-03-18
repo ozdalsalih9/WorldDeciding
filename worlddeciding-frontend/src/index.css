@@ -151,9 +151,7 @@
     white-space: nowrap;
   }
   .global-brand-wordmark-text {
-    max-width: min(240px, 42vw);
-    overflow: hidden;
-    text-overflow: ellipsis;
+    max-width: none;
     white-space: nowrap;
     font-family: var(--font-display);
     font-size: 1.42rem;
@@ -5901,8 +5899,8 @@
   }
 
   .global-brand-wordmark-text {
-    max-width: min(220px, 52vw);
-    font-size: clamp(1.5rem, 5.6vw, 1.9rem);
+    max-width: calc(100vw - 126px);
+    font-size: clamp(1.18rem, 4.4vw, 1.42rem);
     letter-spacing: 0;
     background: linear-gradient(135deg, #091528 0%, #203f68 45%, #1ec8f0 100%);
     -webkit-background-clip: text;
