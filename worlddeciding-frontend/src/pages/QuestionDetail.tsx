@@ -498,7 +498,7 @@ export default function QuestionDetail() {
       postVotePromptDelayTimer.current = setTimeout(() => {
         setShowPostVotePrompt(true)
         postVotePromptDelayTimer.current = null
-      }, 5000)
+      }, 2500)
     },
     onError: (error: any) => {
       const status = error?.response?.status

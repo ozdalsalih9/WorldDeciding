@@ -330,16 +330,7 @@ public class AuthController : ControllerBase
             await emailSender.SendAsync(
                 req.Email,
                 "WorldDeciding password reset",
-                $"""
-                <div style="font-family: Arial, sans-serif; line-height: 1.6;">
-                  <h2>Password reset requested</h2>
-                  <p>Use the token below in the Reset Password screen, or click the link.</p>
-                  <p><b>Reset token:</b></p>
-                  <pre style="padding:12px;border-radius:8px;background:#f5f5f5;white-space:pre-wrap;">{encodedToken}</pre>
-                  <p><a href="{resetUrl}">Open reset page</a></p>
-                  <p>If you did not request this, you can ignore this email.</p>
-                </div>
-                """);
+                BuildPasswordResetHtml(resetUrl, encodedToken));
         }
         catch
         {
@@ -558,53 +549,182 @@ public class AuthController : ControllerBase
 
     private static string BuildConfirmEmailHtml(string confirmUrl)
     {
+        return BuildAccountEmailHtml(
+            preheader: "Confirm your WorldDeciding email to activate your account.",
+            eyebrow: "Account activation",
+            title: "Confirm your email",
+            lead: "Welcome to WorldDeciding. Confirm your email address to activate your account and start voting, comparing, and tracking the global pulse.",
+            actionLabel: "Confirm Email",
+            actionUrl: confirmUrl,
+            helperTitle: "Direct confirmation link",
+            helperCopy: "If the button does not open, copy and paste this link into your browser.",
+            helperValue: confirmUrl,
+            noteTitle: "Security note",
+            noteCopy: "If you did not create a WorldDeciding account, you can safely ignore this email.",
+            accentA: "#4f74e6",
+            accentB: "#22d3ee");
+    }
+
+    private static string BuildPasswordResetHtml(string resetUrl, string encodedToken)
+    {
+        return BuildAccountEmailHtml(
+            preheader: "Use this email to reset your WorldDeciding password.",
+            eyebrow: "Password reset",
+            title: "Reset your password",
+            lead: "We received a request to reset your WorldDeciding password. Use the button below to open the reset screen, or use the secure token if you are entering it manually.",
+            actionLabel: "Open Reset Page",
+            actionUrl: resetUrl,
+            helperTitle: "Reset token",
+            helperCopy: "Paste this token into the reset form only if you are asked for it.",
+            helperValue: encodedToken,
+            noteTitle: "Did not request this?",
+            noteCopy: "If this was not you, ignore this email. Your account stays unchanged until you complete the reset flow.",
+            accentA: "#0f172a",
+            accentB: "#4f74e6");
+    }
+
+    private static string BuildAccountEmailHtml(
+        string preheader,
+        string eyebrow,
+        string title,
+        string lead,
+        string actionLabel,
+        string actionUrl,
+        string helperTitle,
+        string helperCopy,
+        string helperValue,
+        string noteTitle,
+        string noteCopy,
+        string accentA,
+        string accentB)
+    {
+        var safePreheader = WebUtility.HtmlEncode(preheader);
+        var safeEyebrow = WebUtility.HtmlEncode(eyebrow);
+        var safeTitle = WebUtility.HtmlEncode(title);
+        var safeLead = WebUtility.HtmlEncode(lead);
+        var safeActionLabel = WebUtility.HtmlEncode(actionLabel);
+        var safeActionUrl = WebUtility.HtmlEncode(actionUrl);
+        var safeHelperTitle = WebUtility.HtmlEncode(helperTitle);
+        var safeHelperCopy = WebUtility.HtmlEncode(helperCopy);
+        var safeHelperValue = WebUtility.HtmlEncode(helperValue);
+        var safeNoteTitle = WebUtility.HtmlEncode(noteTitle);
+        var safeNoteCopy = WebUtility.HtmlEncode(noteCopy);
+        var safeAccentA = WebUtility.HtmlEncode(accentA);
+        var safeAccentB = WebUtility.HtmlEncode(accentB);
+
         return $"""
     <!doctype html>
     <html lang="en">
     <head>
       <meta charset="utf-8" />
       <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-      <title>Confirm your email</title>
+      <title>{safeTitle}</title>
     </head>
-    <body style="margin:0;padding:0;background:#f4f7fb;font-family:Arial,Helvetica,sans-serif;color:#111827;">
-      <div style="max-width:640px;margin:0 auto;padding:32px 16px;">
-        <div style="background:#ffffff;border-radius:18px;padding:40px 32px;box-shadow:0 10px 30px rgba(0,0,0,0.08);">
-          <div style="text-align:center;margin-bottom:24px;">
-            <div style="display:inline-block;padding:10px 16px;border-radius:999px;background:#eef2ff;color:#4338ca;font-weight:700;font-size:13px;letter-spacing:.3px;">
-              WorldDeciding
-            </div>
-          </div>
-
-          <h1 style="margin:0 0 12px;font-size:28px;line-height:1.25;color:#111827;text-align:center;">
-            Confirm your email
-          </h1>
-
-          <p style="margin:0 0 18px;font-size:16px;line-height:1.7;color:#4b5563;text-align:center;">
-            Welcome! Please confirm your email address to activate your account and start using WorldDeciding.
-          </p>
-
-          <div style="text-align:center;margin:32px 0;">
-            <a href="{confirmUrl}"
-               style="display:inline-block;background:#111827;color:#ffffff;text-decoration:none;font-weight:700;font-size:16px;padding:14px 24px;border-radius:12px;">
-              Confirm Email
-            </a>
-          </div>
-
-          <p style="margin:0 0 10px;font-size:14px;line-height:1.7;color:#6b7280;">
-            If the button does not work, copy and paste this link into your browser:
-          </p>
-
-          <p style="margin:0 0 24px;font-size:13px;line-height:1.8;word-break:break-all;color:#374151;background:#f9fafb;border:1px solid #e5e7eb;border-radius:12px;padding:14px;">
-            {confirmUrl}
-          </p>
-
-          <hr style="border:none;border-top:1px solid #e5e7eb;margin:28px 0;" />
-
-          <p style="margin:0;font-size:13px;line-height:1.7;color:#9ca3af;text-align:center;">
-            If you didn’t create this account, you can safely ignore this email.
-          </p>
-        </div>
+    <body style="margin:0;padding:0;background:#eaf2ff;font-family:Arial,Helvetica,sans-serif;color:#0f172a;">
+      <div style="display:none;max-height:0;overflow:hidden;opacity:0;mso-hide:all;">
+        {safePreheader}
       </div>
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:
+        radial-gradient(circle at top, rgba(79,116,230,0.16), transparent 38%),
+        linear-gradient(180deg, #edf5ff 0%, #e7f0ff 100%);
+        margin:0;padding:32px 12px;">
+        <tr>
+          <td align="center">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="max-width:680px;">
+              <tr>
+                <td style="padding-bottom:14px;text-align:center;">
+                  <span style="display:inline-block;padding:8px 14px;border-radius:999px;background:rgba(255,255,255,0.72);border:1px solid rgba(148,163,184,0.18);color:#35507a;font-size:11px;font-weight:800;letter-spacing:0.28em;text-transform:uppercase;">
+                    WorldDeciding
+                  </span>
+                </td>
+              </tr>
+              <tr>
+                <td style="border-radius:28px;padding:1px;background:linear-gradient(135deg, {safeAccentA}, {safeAccentB});box-shadow:0 28px 80px rgba(15,23,42,0.14);">
+                  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:
+                    radial-gradient(circle at top left, rgba(79,116,230,0.14), transparent 34%),
+                    linear-gradient(180deg, rgba(255,255,255,0.98), rgba(241,247,255,0.96));
+                    border-radius:27px;">
+                    <tr>
+                      <td style="padding:34px 30px 18px;">
+                        <div style="display:inline-block;padding:8px 14px;border-radius:999px;background:rgba(79,116,230,0.1);color:#31527e;font-size:12px;font-weight:800;letter-spacing:0.18em;text-transform:uppercase;">
+                          {safeEyebrow}
+                        </div>
+                        <h1 style="margin:18px 0 12px;font-size:34px;line-height:1.12;color:#0b1726;font-weight:800;">
+                          {safeTitle}
+                        </h1>
+                        <p style="margin:0;font-size:16px;line-height:1.75;color:#4a6287;">
+                          {safeLead}
+                        </p>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="padding:0 30px 10px;">
+                        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+                          <tr>
+                            <td style="padding:18px;border-radius:24px;background:
+                              linear-gradient(135deg, rgba(79,116,230,0.08), rgba(34,211,238,0.08)),
+                              rgba(255,255,255,0.78);
+                              border:1px solid rgba(148,163,184,0.18);">
+                              <div style="font-size:13px;line-height:1.7;color:#4a6287;">
+                                Secure account action for WorldDeciding.
+                              </div>
+                              <div style="padding-top:18px;">
+                                <a href="{safeActionUrl}" style="display:inline-block;padding:14px 24px;border-radius:14px;background:linear-gradient(135deg, {safeAccentA}, {safeAccentB});color:#ffffff;text-decoration:none;font-size:15px;font-weight:800;letter-spacing:0.02em;box-shadow:0 18px 36px rgba(79,116,230,0.22);">
+                                  {safeActionLabel}
+                                </a>
+                              </div>
+                            </td>
+                          </tr>
+                        </table>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="padding:12px 30px 10px;">
+                        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+                          <tr>
+                            <td style="padding:18px 18px 16px;border-radius:22px;background:rgba(255,255,255,0.82);border:1px solid rgba(148,163,184,0.18);">
+                              <div style="font-size:12px;font-weight:800;letter-spacing:0.18em;text-transform:uppercase;color:#3b5b86;">
+                                {safeHelperTitle}
+                              </div>
+                              <p style="margin:10px 0 0;font-size:14px;line-height:1.7;color:#5a7195;">
+                                {safeHelperCopy}
+                              </p>
+                              <div style="margin-top:14px;padding:14px 16px;border-radius:16px;background:#f8fbff;border:1px solid rgba(173,201,229,0.4);font-size:13px;line-height:1.7;color:#0f2742;word-break:break-all;">
+                                {safeHelperValue}
+                              </div>
+                            </td>
+                          </tr>
+                        </table>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="padding:10px 30px 34px;">
+                        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+                          <tr>
+                            <td style="padding:16px 18px;border-radius:20px;background:rgba(15,23,42,0.03);border:1px solid rgba(148,163,184,0.14);">
+                              <div style="font-size:12px;font-weight:800;letter-spacing:0.18em;text-transform:uppercase;color:#304f78;">
+                                {safeNoteTitle}
+                              </div>
+                              <p style="margin:10px 0 0;font-size:14px;line-height:1.7;color:#617795;">
+                                {safeNoteCopy}
+                              </p>
+                            </td>
+                          </tr>
+                        </table>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:16px 10px 0;text-align:center;font-size:12px;line-height:1.7;color:#6f85a6;">
+                  WorldDeciding account security email. Please do not reply to this automated message.
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
     </body>
     </html>
     """;

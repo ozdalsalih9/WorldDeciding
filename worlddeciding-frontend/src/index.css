@@ -105,32 +105,63 @@
     gap: 16px;
   }
   .global-brand {
-    @apply inline-flex items-center gap-3 rounded-2xl px-2 py-1;
+    @apply inline-flex items-center gap-3 rounded-[24px] px-2 py-1.5;
     min-width: 0;
+    position: relative;
+    text-decoration: none;
+  }
+  .global-brand-emblem {
+    position: relative;
+    display: grid;
+    place-items: center;
+    flex: 0 0 auto;
+  }
+  .global-brand-logo-glow {
+    position: absolute;
+    inset: -8px;
+    border-radius: 9999px;
+    background:
+      radial-gradient(circle, rgba(34,211,238,0.34) 0%, rgba(79,116,230,0.22) 45%, rgba(79,116,230,0) 72%);
+    filter: blur(12px);
+    opacity: 0.9;
   }
   .global-brand-logo {
+    position: relative;
+    z-index: 1;
     width: 50px;
     height: 50px;
     border-radius: 9999px;
     object-fit: cover;
     border: 1px solid rgba(173, 201, 229, 0.58);
     box-shadow:
-      0 10px 24px rgba(79, 116, 230, 0.2),
-      0 0 0 4px rgba(255,255,255,0.5);
+      0 12px 28px rgba(79, 116, 230, 0.22),
+      0 0 0 4px rgba(255,255,255,0.54);
+  }
+  .global-brand-copy {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
   }
   .global-brand-text {
-    font-size: 1rem;
-    font-weight: 700;
-    letter-spacing: 0.01em;
-    color: var(--text-strong);
+    font-size: 0.62rem;
+    font-weight: 800;
+    letter-spacing: 0.26em;
+    text-transform: uppercase;
+    color: #4e6b92;
     white-space: nowrap;
   }
-  .global-brand-wordmark {
-    width: auto;
-    height: 22px;
-    max-width: min(180px, 38vw);
-    object-fit: contain;
-    flex: 0 1 auto;
+  .global-brand-wordmark-text {
+    max-width: min(240px, 42vw);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: var(--font-display);
+    font-size: 1.42rem;
+    font-weight: 800;
+    line-height: 1;
+    letter-spacing: 0.01em;
+    color: #0d1f37;
+    text-shadow: 0 10px 28px rgba(79,116,230,0.12);
   }
   .global-nav-links {
     align-items: center;
@@ -193,20 +224,44 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    height: 44px;
-    width: 44px;
-    border-radius: 16px;
-    border: 1px solid rgba(173,201,229,0.34);
-    background: rgba(255,255,255,0.76);
+    height: 48px;
+    width: 48px;
+    border-radius: 18px;
+    border: 1px solid rgba(126, 163, 223, 0.34);
+    background:
+      radial-gradient(circle at 30% 20%, rgba(255,255,255,0.96), rgba(239,246,255,0.92)),
+      linear-gradient(145deg, rgba(255,255,255,0.82), rgba(227,241,255,0.76));
     color: var(--text-strong);
-    box-shadow: 0 10px 24px rgba(15,23,42,0.06);
-    transition: transform 0.2s ease, background 0.2s ease, border-color 0.2s ease;
+    box-shadow:
+      0 14px 28px rgba(15,23,42,0.08),
+      inset 0 1px 0 rgba(255,255,255,0.72);
+    transition: transform 0.2s ease, background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  }
+  .global-nav-toggle-bars {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    width: 22px;
+    height: 16px;
+  }
+  .global-nav-toggle-bar {
+    width: 100%;
+    height: 2.5px;
+    border-radius: 9999px;
+    background: linear-gradient(90deg, #0f1d31, #1d3553);
+    box-shadow: 0 0 12px rgba(79,116,230,0.18);
+    transition: transform 0.2s ease, opacity 0.2s ease;
   }
   .global-nav-toggle:hover,
   .global-nav-toggle.is-open {
     transform: translateY(-1px);
-    background: rgba(255,255,255,0.92);
-    border-color: rgba(79,116,230,0.28);
+    background:
+      radial-gradient(circle at 30% 20%, rgba(255,255,255,1), rgba(238,246,255,0.96)),
+      linear-gradient(145deg, rgba(255,255,255,0.9), rgba(226,240,255,0.84));
+    border-color: rgba(79,116,230,0.3);
+    box-shadow:
+      0 18px 34px rgba(34,211,238,0.14),
+      inset 0 1px 0 rgba(255,255,255,0.76);
   }
   .global-nav-mobile {
     display: grid;
@@ -3040,9 +3095,15 @@
   }
 
   .post-vote-overlay {
-    align-items: flex-start;
-    padding-top: clamp(72px, 14vh, 118px);
-    padding-bottom: 96px;
+    position: fixed;
+    inset: 0;
+    z-index: 170;
+    align-items: center;
+    justify-content: center;
+    padding:
+      max(20px, env(safe-area-inset-top, 0px))
+      14px
+      max(20px, env(safe-area-inset-bottom, 0px));
   }
 
   .post-vote-card {
@@ -5800,52 +5861,79 @@
 
 @media (max-width: 520px) {
   .global-nav {
-    padding-top: 0.5rem;
+    padding-top: 0.4rem;
   }
 
   .global-nav-shell {
-    padding: 9px 10px;
-    border-radius: 20px;
+    padding: 12px 12px 14px;
+    border-radius: 28px;
+    border-color: rgba(151, 186, 231, 0.38);
+    background:
+      radial-gradient(circle at 10% 10%, rgba(255,255,255,0.98), rgba(244,249,255,0.96) 34%, rgba(234,244,255,0.92) 72%),
+      linear-gradient(140deg, rgba(248,252,255,0.96), rgba(230,241,255,0.92));
+    box-shadow:
+      0 26px 64px rgba(20, 38, 76, 0.12),
+      0 0 0 1px rgba(255,255,255,0.6) inset;
   }
 
   .global-nav-main {
-    gap: 8px;
+    gap: 12px;
+    align-items: center;
   }
 
   .global-brand {
-    gap: 8px;
+    gap: 12px;
+    flex: 1;
     padding-right: 0;
   }
 
   .global-brand-logo {
-    width: 38px;
-    height: 38px;
+    width: 52px;
+    height: 52px;
     box-shadow:
-      0 8px 18px rgba(79, 116, 230, 0.14),
-      0 0 0 3px rgba(255,255,255,0.48);
+      0 16px 34px rgba(79, 116, 230, 0.2),
+      0 0 0 4px rgba(255,255,255,0.58);
   }
 
   .global-brand-text {
-    font-size: 0.82rem;
+    font-size: 0.6rem;
+    letter-spacing: 0.24em;
   }
 
-  .global-brand-wordmark {
-    height: 18px;
-    max-width: min(136px, 44vw);
+  .global-brand-wordmark-text {
+    max-width: min(220px, 52vw);
+    font-size: clamp(1.5rem, 5.6vw, 1.9rem);
+    letter-spacing: 0;
+    background: linear-gradient(135deg, #091528 0%, #203f68 45%, #1ec8f0 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    text-shadow: none;
+  }
+
+  .global-brand-copy {
+    gap: 3px;
   }
 
   .global-nav-toggle {
-    width: 38px;
-    height: 38px;
-    border-radius: 14px;
+    width: 54px;
+    height: 54px;
+    border-radius: 20px;
+    flex: 0 0 auto;
+  }
+
+  .global-nav-toggle-bars {
+    width: 24px;
+    height: 18px;
   }
 
   .global-nav-mobile.is-open {
-    margin-top: 10px;
+    margin-top: 14px;
   }
 
   .global-nav-mobile-inner {
-    padding-top: 10px;
+    border-top-color: rgba(151, 186, 231, 0.34);
+    padding-top: 14px;
   }
 
   .global-nav-mobile-grid,
@@ -5853,11 +5941,60 @@
     grid-template-columns: 1fr;
   }
 
+  .global-nav-mobile-grid {
+    gap: 12px;
+  }
+
+  .global-nav-mobile-grid .nav-link-slim {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 68px;
+    padding: 16px 18px;
+    border-radius: 24px;
+    border: 1px solid rgba(159, 191, 235, 0.34);
+    background:
+      radial-gradient(circle at 14% 20%, rgba(255,255,255,0.94), rgba(245,249,255,0.92) 42%, rgba(235,244,255,0.84) 100%),
+      linear-gradient(135deg, rgba(255,255,255,0.74), rgba(231,241,255,0.72));
+    box-shadow:
+      0 14px 30px rgba(17, 35, 68, 0.08),
+      inset 0 1px 0 rgba(255,255,255,0.74);
+    color: #29496f;
+    font-family: var(--font-display);
+    font-size: 1.18rem;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+  }
+
+  .global-nav-mobile-grid .nav-link-slim:hover {
+    transform: translateY(-1px);
+    color: #132a44;
+  }
+
+  .global-nav-mobile-grid .nav-link-slim-active {
+    border-color: rgba(34,211,238,0.42);
+    background:
+      linear-gradient(135deg, rgba(255,255,255,0.94), rgba(233,246,255,0.9)),
+      linear-gradient(135deg, rgba(34,211,238,0.2), rgba(79,116,230,0.16));
+    box-shadow:
+      0 18px 34px rgba(34,211,238,0.14),
+      inset 0 0 0 1px rgba(255,255,255,0.58);
+    color: #0f2742;
+  }
+
+  .global-nav-mobile-actions {
+    gap: 12px;
+    margin-top: 14px;
+  }
+
   .global-nav-cta {
     width: 100%;
-    min-height: 40px;
-    padding: 9px 14px;
-    font-size: 0.84rem;
+    min-height: 54px;
+    padding: 12px 16px;
+    border-radius: 20px;
+    font-size: 0.92rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
   }
 
   .question-mobile-utility {

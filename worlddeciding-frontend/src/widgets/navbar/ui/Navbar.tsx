@@ -4,13 +4,6 @@ import useAuth from '@/features/auth'
 import { useToast } from '@/shared/ui/toast'
 import worldDecidingLogo from '@/shared/logo/worlddeciding.png'
 
-const worldDecidingWordmark = `data:image/svg+xml;utf8,${encodeURIComponent(`
-<svg xmlns="http://www.w3.org/2000/svg" width="230" height="42" viewBox="0 0 230 42" fill="none">
-  <rect width="230" height="42" rx="21" fill="rgba(255,255,255,0.01)"/>
-  <text x="0" y="29" fill="#0B1726" font-family="Space Grotesk, Arial, sans-serif" font-size="24" font-weight="700" letter-spacing="0.2">WorldDeciding</text>
-</svg>
-`)}`
-
 export default function Navbar() {
   const { isAuthenticated, isAdmin, isAuthHydrated, logout } = useAuth()
   const toast = useToast()
@@ -28,13 +21,14 @@ export default function Navbar() {
           <span className="global-nav-strike" aria-hidden />
           <div className="global-nav-main">
             <Link to="/" className="global-brand">
-              <img src={worldDecidingLogo} alt="WorldDeciding logo" className="global-brand-logo" />
-              <img
-                src={worldDecidingWordmark}
-                alt="WorldDeciding"
-                className="global-brand-wordmark"
-                draggable="false"
-              />
+              <span className="global-brand-emblem" aria-hidden>
+                <span className="global-brand-logo-glow" />
+                <img src={worldDecidingLogo} alt="WorldDeciding logo" className="global-brand-logo" />
+              </span>
+              <span className="global-brand-copy">
+                <span className="global-brand-text">Global Pulse Network</span>
+                <span className="global-brand-wordmark-text">WorldDeciding</span>
+              </span>
             </Link>
 
             <div className="global-nav-links hidden md:flex">
@@ -78,10 +72,10 @@ export default function Navbar() {
               className={`global-nav-toggle md:hidden ${isOpen ? 'is-open' : ''}`}
             >
               <span className="sr-only">Toggle menu</span>
-              <span className="flex h-4 w-5 flex-col justify-between">
-                <span className={`h-0.5 w-full rounded-full bg-[var(--text-strong)] transition ${isOpen ? 'translate-y-[6px] rotate-45' : ''}`} />
-                <span className={`h-0.5 w-full rounded-full bg-[var(--text-strong)] transition ${isOpen ? 'opacity-0' : ''}`} />
-                <span className={`h-0.5 w-full rounded-full bg-[var(--text-strong)] transition ${isOpen ? '-translate-y-[6px] -rotate-45' : ''}`} />
+              <span className="global-nav-toggle-bars">
+                <span className={`global-nav-toggle-bar ${isOpen ? 'translate-y-[6px] rotate-45' : ''}`} />
+                <span className={`global-nav-toggle-bar ${isOpen ? 'opacity-0' : ''}`} />
+                <span className={`global-nav-toggle-bar ${isOpen ? '-translate-y-[6px] -rotate-45' : ''}`} />
               </span>
             </button>
           </div>

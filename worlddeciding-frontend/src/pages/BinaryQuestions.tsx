@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { fetchQuestionsPage } from '@/entities/question/api/questions'
@@ -9,24 +9,51 @@ const isBinary = (value?: number | string) => {
   return false
 }
 
+const RANDOM_PAGE_TAKE = 100
+
+const pickRandomId = (items: Array<{ id: string }>) => {
+  if (!items.length) return null
+  return items[Math.floor(Math.random() * items.length)]?.id ?? null
+}
+
+async function fetchRandomQuestionIdByType(type: string | number) {
+  const firstPage = await fetchQuestionsPage({ page: 1, take: RANDOM_PAGE_TAKE, type })
+  if (!firstPage.items.length) return null
+
+  const total = Math.max(firstPage.total, firstPage.items.length)
+  const randomIndex = Math.floor(Math.random() * total)
+  const targetPage = Math.floor(randomIndex / RANDOM_PAGE_TAKE) + 1
+
+  if (targetPage === firstPage.page) {
+    return firstPage.items[randomIndex % RANDOM_PAGE_TAKE]?.id ?? pickRandomId(firstPage.items)
+  }
+
+  const targetPageData = await fetchQuestionsPage({ page: targetPage, take: RANDOM_PAGE_TAKE, type })
+  return (
+    targetPageData.items[randomIndex % RANDOM_PAGE_TAKE]?.id ??
+    pickRandomId(targetPageData.items) ??
+    pickRandomId(firstPage.items)
+  )
+}
+
 export default function BinaryQuestions() {
   const navigate = useNavigate()
+  const [querySeed] = useState(() => Math.random().toString(36).slice(2))
 
-  const { data, isLoading, isError } = useQuery({
-    queryKey: ['questions', 'binary'],
+  const { data: firstQuestionId, isLoading, isError } = useQuery({
+    queryKey: ['questions', 'binary', 'random-start', querySeed],
     queryFn: async () => {
-      const byText = await fetchQuestionsPage({ page: 1, take: 1, type: 'Binary' })
-      if (byText.items.length) return byText.items
+      const byText = await fetchRandomQuestionIdByType('Binary')
+      if (byText) return byText
 
-      const byNumeric = await fetchQuestionsPage({ page: 1, take: 1, type: 0 })
-      if (byNumeric.items.length) return byNumeric.items
+      const byNumeric = await fetchRandomQuestionIdByType(0)
+      if (byNumeric) return byNumeric
 
-      const generic = await fetchQuestionsPage({ page: 1, take: 30 })
-      return generic.items.filter(item => isBinary(item.type))
+      const generic = await fetchQuestionsPage({ page: 1, take: RANDOM_PAGE_TAKE })
+      return pickRandomId(generic.items.filter(item => isBinary(item.type)))
     },
+    gcTime: 0,
   })
-
-  const firstQuestionId = useMemo(() => data?.[0]?.id ?? null, [data])
 
   useEffect(() => {
     if (!isLoading && !isError && firstQuestionId) {
