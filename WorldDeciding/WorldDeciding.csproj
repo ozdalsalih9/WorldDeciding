@@ -27,6 +27,13 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Content Include="IP2LOCATION-LITE-DB1\IP2LOCATION-LITE-DB1.BIN">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
     <Folder Include="Contracts\Auth\" />
   </ItemGroup>
 

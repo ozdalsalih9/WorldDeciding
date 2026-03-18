@@ -4,6 +4,13 @@ import useAuth from '@/features/auth'
 import { useToast } from '@/shared/ui/toast'
 import worldDecidingLogo from '@/shared/logo/worlddeciding.png'
 
+const worldDecidingWordmark = `data:image/svg+xml;utf8,${encodeURIComponent(`
+<svg xmlns="http://www.w3.org/2000/svg" width="230" height="42" viewBox="0 0 230 42" fill="none">
+  <rect width="230" height="42" rx="21" fill="rgba(255,255,255,0.01)"/>
+  <text x="0" y="29" fill="#0B1726" font-family="Space Grotesk, Arial, sans-serif" font-size="24" font-weight="700" letter-spacing="0.2">WorldDeciding</text>
+</svg>
+`)}`
+
 export default function Navbar() {
   const { isAuthenticated, isAdmin, isAuthHydrated, logout } = useAuth()
   const toast = useToast()
@@ -22,7 +29,12 @@ export default function Navbar() {
           <div className="global-nav-main">
             <Link to="/" className="global-brand">
               <img src={worldDecidingLogo} alt="WorldDeciding logo" className="global-brand-logo" />
-              <span className="global-brand-text">WorldDeciding</span>
+              <img
+                src={worldDecidingWordmark}
+                alt="WorldDeciding"
+                className="global-brand-wordmark"
+                draggable="false"
+              />
             </Link>
 
             <div className="global-nav-links hidden md:flex">
@@ -30,7 +42,7 @@ export default function Navbar() {
               <NavLink to="/questions" className={({ isActive }) => `nav-link-slim ${isActive ? 'nav-link-slim-active' : ''}`}>Questions</NavLink>
               <NavLink to="/leaderboard" className={({ isActive }) => `nav-link-slim ${isActive ? 'nav-link-slim-active' : ''}`}>Leaderboard</NavLink>
               <NavLink to="/categories" className={({ isActive }) => `nav-link-slim ${isActive ? 'nav-link-slim-active' : ''}`}>Categories</NavLink>
-              <NavLink to="/binary" className={({ isActive }) => `nav-link-slim ${isActive ? 'nav-link-slim-active' : ''}`}>O mu bu mu</NavLink>
+              <NavLink to="/binary" className={({ isActive }) => `nav-link-slim ${isActive ? 'nav-link-slim-active' : ''}`}>Either / Or</NavLink>
               {isAdmin ? (
                 <NavLink to="/admin" className={({ isActive }) => `nav-link-slim ${isActive ? 'nav-link-slim-active' : ''}`}>Admin</NavLink>
               ) : null}
@@ -81,7 +93,7 @@ export default function Navbar() {
                 <NavLink to="/questions" className={({ isActive }) => `nav-link-slim ${isActive ? 'nav-link-slim-active' : ''}`} onClick={() => setIsOpen(false)}>Questions</NavLink>
                 <NavLink to="/leaderboard" className={({ isActive }) => `nav-link-slim ${isActive ? 'nav-link-slim-active' : ''}`} onClick={() => setIsOpen(false)}>Leaderboard</NavLink>
                 <NavLink to="/categories" className={({ isActive }) => `nav-link-slim ${isActive ? 'nav-link-slim-active' : ''}`} onClick={() => setIsOpen(false)}>Categories</NavLink>
-                <NavLink to="/binary" className={({ isActive }) => `nav-link-slim ${isActive ? 'nav-link-slim-active' : ''}`} onClick={() => setIsOpen(false)}>O mu bu mu</NavLink>
+                <NavLink to="/binary" className={({ isActive }) => `nav-link-slim ${isActive ? 'nav-link-slim-active' : ''}`} onClick={() => setIsOpen(false)}>Either / Or</NavLink>
                 {isAdmin ? (
                   <NavLink to="/admin" className={({ isActive }) => `nav-link-slim ${isActive ? 'nav-link-slim-active' : ''}`} onClick={() => setIsOpen(false)}>Admin</NavLink>
                 ) : null}

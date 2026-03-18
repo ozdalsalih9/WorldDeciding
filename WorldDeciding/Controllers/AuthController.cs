@@ -3,6 +3,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.WebUtilities;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
@@ -28,8 +30,11 @@ public class AuthController : ControllerBase
     private readonly IAppDbContext _db;
     private readonly IRefreshTokenService _refreshTokens;
     private readonly IClientContext _client;
+    private readonly IGeoIpResolver _geo;
     private readonly IIpHasher _ipHasher;
     private readonly IAbuseDetector _abuse;
+    private readonly IHostEnvironment _environment;
+    private readonly ILogger<AuthController> _logger;
     private readonly RefreshCookieOptions _refreshCookieOptions;
 
     public AuthController(
@@ -39,8 +44,11 @@ public class AuthController : ControllerBase
         IAppDbContext db,
         IRefreshTokenService refreshTokens,
         IClientContext client,
+        IGeoIpResolver geo,
         IIpHasher ipHasher,
         IAbuseDetector abuse,
+        IHostEnvironment environment,
+        ILogger<AuthController> logger,
         IOptions<RefreshCookieOptions> refreshCookieOptions)
     {
         _users = users;
@@ -49,8 +57,11 @@ public class AuthController : ControllerBase
         _db = db;
         _refreshTokens = refreshTokens;
         _client = client;
+        _geo = geo;
         _ipHasher = ipHasher;
         _abuse = abuse;
+        _environment = environment;
+        _logger = logger;
         _refreshCookieOptions = refreshCookieOptions.Value;
     }
 
@@ -106,6 +117,14 @@ public class AuthController : ControllerBase
         if (req.Gender is short g && (g < 0 || g > 4))
             return BadRequest(new { message = "Invalid gender value." });
 
+        var requestedCountryCode = NormalizeCountryCode(req.CountryCode);
+        if (requestedCountryCode is null)
+            return BadRequest(new { message = "Country must be a valid ISO-3166-1 alpha-2 code." });
+
+        var countryMismatch = await ValidateRegistrationCountryAsync(requestedCountryCode, HttpContext.RequestAborted);
+        if (countryMismatch is not null)
+            return Conflict(countryMismatch);
+
         var exists = await _users.FindByEmailAsync(req.Email);
         if (exists is not null)
             return BadRequest(new { message = "Email is already in use." });
@@ -115,7 +134,7 @@ public class AuthController : ControllerBase
             Id = Guid.NewGuid(),
             UserName = req.Email,
             Email = req.Email,
-            CountryCode = req.CountryCode,
+            CountryCode = requestedCountryCode,
             BirthDate = req.BirthDate,
             Gender = (req.Gender is short gv) ? (Gender)gv : Gender.Unknown,
             EmailConfirmed = false
@@ -548,6 +567,90 @@ public class AuthController : ControllerBase
         );
 
         return Task.FromResult(new JwtSecurityTokenHandler().WriteToken(token));
+    }
+
+    private async Task<object?> ValidateRegistrationCountryAsync(string selectedCountryCode, CancellationToken ct)
+    {
+        if (!IsRegisterCountryMatchEnforced())
+            return null;
+
+        var clientIp = _client.ClientIp;
+        if (clientIp is null)
+        {
+            _logger.LogDebug("Skipping register country enforcement because client IP could not be resolved.");
+            return null;
+        }
+
+        try
+        {
+            var (countryIso2, confidence, provider) = await _geo.ResolveAsync(clientIp, ct);
+            var inferredCountryCode = NormalizeCountryCode(countryIso2);
+            var minimumConfidence = GetRegisterCountryMinimumConfidence();
+
+            if (inferredCountryCode is null)
+            {
+                _logger.LogInformation(
+                    "Skipping register country enforcement because GeoIP returned no country. Provider={Provider} ClientIp={ClientIp}",
+                    provider,
+                    clientIp);
+                return null;
+            }
+
+            if (confidence < minimumConfidence)
+            {
+                _logger.LogInformation(
+                    "Skipping register country enforcement because GeoIP confidence is below threshold. Provider={Provider} Confidence={Confidence} Threshold={Threshold} ClientIp={ClientIp} Country={Country}",
+                    provider,
+                    confidence,
+                    minimumConfidence,
+                    clientIp,
+                    inferredCountryCode);
+                return null;
+            }
+
+            if (string.Equals(selectedCountryCode, inferredCountryCode, StringComparison.OrdinalIgnoreCase))
+                return null;
+
+            _logger.LogInformation(
+                "Registration country mismatch detected. Selected={SelectedCountry} Inferred={InferredCountry} Provider={Provider} Confidence={Confidence} ClientIp={ClientIp}",
+                selectedCountryCode,
+                inferredCountryCode,
+                provider,
+                confidence,
+                clientIp);
+
+            return new
+            {
+                message = $"Your connection appears to be from {inferredCountryCode}. Please select that country to continue registration.",
+                suggestedCountryCode = inferredCountryCode,
+                detectedCountryCode = inferredCountryCode
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "GeoIP lookup failed during registration country validation for IP {ClientIp}", clientIp);
+            return null;
+        }
+    }
+
+    private bool IsRegisterCountryMatchEnforced()
+    {
+        return _cfg.GetValue<bool?>("GeoIp:EnforceCountryMatchOnRegister") ?? !_environment.IsDevelopment();
+    }
+
+    private double GetRegisterCountryMinimumConfidence()
+    {
+        var configured = _cfg.GetValue<double?>("GeoIp:MinimumCountryConfidence") ?? 0.6;
+        return Math.Clamp(configured, 0.0, 1.0);
+    }
+
+    private static string? NormalizeCountryCode(string? countryCode)
+    {
+        var normalized = countryCode?.Trim().ToUpperInvariant();
+        if (string.IsNullOrWhiteSpace(normalized) || normalized.Length != 2 || !normalized.All(char.IsLetter))
+            return null;
+
+        return normalized;
     }
 
     private void AppendRefreshTokenCookie(string refreshToken)

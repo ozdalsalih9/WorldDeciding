@@ -1,6 +1,21 @@
 import Axios from 'axios'
+import type { AxiosRequestConfig } from 'axios'
 
 let accessTokenMemory: string | null = null
+
+type RefreshAwareRequestConfig = AxiosRequestConfig & {
+  skipAuthRefresh?: boolean
+  _retry?: boolean
+}
+
+const AUTH_REFRESH_EXCLUDED_PATHS = new Set([
+  '/api/auth/login',
+  '/api/auth/register',
+  '/api/auth/confirm-email',
+  '/api/auth/forgot-password',
+  '/api/auth/reset-password',
+  '/api/auth/resend-confirmation',
+])
 
 export function setAccessToken(token: string | null) {
   if (!token || token === 'undefined' || token === 'null') {
@@ -12,6 +27,32 @@ export function setAccessToken(token: string | null) {
 
 export function getAccessToken() {
   return accessTokenMemory
+}
+
+function extractRequestPath(url: string | undefined) {
+  if (!url) return ''
+
+  try {
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      return new URL(url).pathname
+    }
+  } catch {
+    return url
+  }
+
+  return url.startsWith('/') ? url : `/${url}`
+}
+
+function shouldSkipRefresh(config: RefreshAwareRequestConfig | undefined) {
+  if (!config) return true
+  if (config.skipAuthRefresh === true) return true
+
+  const requestPath = extractRequestPath(config.url)
+  if (AUTH_REFRESH_EXCLUDED_PATHS.has(requestPath)) return true
+  if (requestPath === '/api/auth/refresh') return true
+  if (!getAccessToken()) return true
+
+  return false
 }
 
 // Behind Caddy in production, the frontend should call the same origin by default.
@@ -65,19 +106,18 @@ api.interceptors.response.use(
     return response
   },
   async (error) => {
-    const originalRequest = error?.config
+    const originalRequest = error?.config as RefreshAwareRequestConfig | undefined
     const status = error?.response?.status
-    const isRefreshRequest = originalRequest?.url?.includes('/api/auth/refresh')
 
-    if (status !== 401 || !originalRequest || isRefreshRequest) {
+    if (status !== 401 || !originalRequest || shouldSkipRefresh(originalRequest)) {
       return Promise.reject(error)
     }
 
-    const retryFlag = (originalRequest as any)._retry
+    const retryFlag = originalRequest._retry
     if (retryFlag) {
       return Promise.reject(error)
     }
-    ;(originalRequest as any)._retry = true
+    originalRequest._retry = true
 
     if (isRefreshing) {
       return new Promise((resolve, reject) => {
@@ -118,5 +158,9 @@ api.interceptors.response.use(
     }
   }
 )
+
+export const authNoRefreshConfig: RefreshAwareRequestConfig = {
+  skipAuthRefresh: true,
+}
 
 export default api

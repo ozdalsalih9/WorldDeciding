@@ -1,5 +1,10 @@
 import { create } from 'zustand'
-import api, { setAccessToken } from '@/shared/api/client'
+import api, { authNoRefreshConfig, setAccessToken } from '@/shared/api/client'
+
+type AuthClientError = Error & {
+  responseData?: Record<string, unknown>
+  suggestedCountryCode?: string
+}
 
 type AuthState = {
   token: string | null
@@ -82,46 +87,8 @@ function extractApiErrorMessage(error: any): string | null {
 }
 
 function mapLoginError(error: any): string {
-  const status = error?.response?.status
   const raw = extractApiErrorMessage(error) || 'Login failed.'
-  const message = raw.trim()
-  const lower = message.toLowerCase()
-
-  const unverifiedEmailHints = [
-    'verify your email',
-    'confirm your email',
-    'please confirm your email first',
-    'email not verified',
-    'email is not verified',
-    'not verified',
-    'email not confirmed',
-    'email is not confirmed',
-    'not confirmed',
-    'unverified',
-    'unconfirmed',
-    'verification required',
-  ]
-
-  const looksLikeUnverifiedEmail =
-    (status === 400 || status === 401 || status === 403) &&
-    unverifiedEmailHints.some((hint) => lower.includes(hint))
-
-  if (looksLikeUnverifiedEmail) {
-    return 'Please verify your email address before signing in.'
-  }
-
-  const looksLikeLockout =
-    status === 423 ||
-    lower.includes('locked') ||
-    lower.includes('lockout') ||
-    lower.includes('too many') ||
-    lower.includes('attempt')
-
-  if (looksLikeLockout) {
-    return 'Too many failed attempts. Please try again in 10 minutes.'
-  }
-
-  return message || 'Login failed.'
+  return raw.trim() || 'Login failed.'
 }
 
 let hydrateSessionPromise: Promise<void> | null = null
@@ -178,7 +145,7 @@ const useAuth = create<AuthState>((set, get) => ({
 
   login: async (email, password) => {
     try {
-      const res = await api.post('/api/auth/login', { email, password })
+      const res = await api.post('/api/auth/login', { email, password }, authNoRefreshConfig)
       const accessToken = (res as any)?.data?.accessToken ?? (res as any)?.data?.token
       if (!accessToken) throw new Error('Token not found in response')
       const roles = decodeRolesFromJwt(accessToken)
@@ -197,16 +164,24 @@ const useAuth = create<AuthState>((set, get) => ({
 
   register: async (payload) => {
     try {
-      await api.post('/api/auth/register', payload)
+      await api.post('/api/auth/register', payload, authNoRefreshConfig)
     } catch (error: any) {
       const message = extractApiErrorMessage(error)
-      throw new Error(message || 'Sign up failed.')
+      const authError = new Error(message || 'Sign up failed.') as AuthClientError
+      const responseData = error?.response?.data
+      if (responseData && typeof responseData === 'object') {
+        authError.responseData = responseData
+        if (typeof responseData.suggestedCountryCode === 'string') {
+          authError.suggestedCountryCode = responseData.suggestedCountryCode.trim().toUpperCase()
+        }
+      }
+      throw authError
     }
   },
 
   confirmEmail: async ({ userId, token }) => {
     try {
-      await api.post('/api/auth/confirm-email', { userId, token })
+      await api.post('/api/auth/confirm-email', { userId, token }, authNoRefreshConfig)
     } catch (error: any) {
       const message = extractApiErrorMessage(error)
       throw new Error(message || 'Email confirmation failed.')
@@ -215,7 +190,7 @@ const useAuth = create<AuthState>((set, get) => ({
 
   resendConfirmationEmail: async (email) => {
     try {
-      await api.post('/api/auth/resend-confirmation', { email })
+      await api.post('/api/auth/resend-confirmation', { email }, authNoRefreshConfig)
     } catch (error: any) {
       const message = extractApiErrorMessage(error)
       throw new Error(message || 'Could not resend confirmation email.')
@@ -224,7 +199,7 @@ const useAuth = create<AuthState>((set, get) => ({
 
   requestPasswordReset: async (email) => {
     try {
-      await api.post('/api/auth/forgot-password', { email })
+      await api.post('/api/auth/forgot-password', { email }, authNoRefreshConfig)
     } catch (error: any) {
       const message = extractApiErrorMessage(error)
       throw new Error(message || 'Could not send reset email.')
@@ -238,7 +213,7 @@ const useAuth = create<AuthState>((set, get) => ({
         token,
         newPassword,
         confirmNewPassword,
-      })
+      }, authNoRefreshConfig)
     } catch (error: any) {
       const message = extractApiErrorMessage(error)
       throw new Error(message || 'Password reset failed.')

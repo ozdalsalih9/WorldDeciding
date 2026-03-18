@@ -305,6 +305,7 @@ export default function QuestionDetail() {
   const [secondsLeft, setSecondsLeft] = useState(6)
   const [voteError, setVoteError] = useState<string | null>(null)
   const [showVoteSuccessFeedback, setShowVoteSuccessFeedback] = useState(false)
+  const [showVoteConfirm, setShowVoteConfirm] = useState(false)
   const [showComments, setShowComments] = useState(false)
   const [commentSort, setCommentSort] = useState<'top' | 'new'>('top')
   const [showSummary, setShowSummary] = useState(false)
@@ -696,11 +697,22 @@ export default function QuestionDetail() {
 
   const handleSendVote = () => {
     if (!selected || vote.isPending) return
-    const confirmed = window.confirm(
-      'After you submit, you cannot change your vote immediately. You can change it again after 1 day, and it will update your existing vote instead of creating a new one. Continue?'
-    )
-    if (!confirmed) return
+    if (!isAuthenticated) {
+      setVoteError('Please login to vote.')
+      return
+    }
+    setShowVoteConfirm(true)
+  }
+
+  const handleConfirmVote = () => {
+    if (!selected || vote.isPending) return
+    setShowVoteConfirm(false)
     submitVote(selected)
+  }
+
+  const handleCancelVoteConfirm = () => {
+    if (vote.isPending) return
+    setShowVoteConfirm(false)
   }
 
   const handleSubmitComment = () => {
@@ -1160,25 +1172,35 @@ export default function QuestionDetail() {
           </div>
         )}
 
-        {!isTwoOptionLayout && id ? (
-          <Link to={`/questions/${id}/stats`} className="stats-fab">
-            <span className="stats-fab-label">Statistics</span>
-          </Link>
-        ) : null}
-
         {!isTwoOptionLayout && (
-          <button
-            type="button"
-            onClick={() => setShowComments((prev) => !prev)}
-            aria-expanded={showComments}
-            aria-controls="comment-drawer"
-            className={`comment-fab ${showComments ? 'is-open' : ''}`}
-          >
-            <span className="comment-fab-label">{showComments ? 'Close' : 'Comments'}</span>
-            {typeof rootCommentCount === 'number' && (
-              <span className="comment-fab-count">{rootCommentCount}</span>
-            )}
-          </button>
+          <>
+            {id ? (
+              <Link to={`/questions/${id}/stats`} className="stats-fab">
+                <span className="stats-fab-label">Statistics</span>
+              </Link>
+            ) : null}
+
+            <button
+              type="button"
+              onClick={handleShareQuestion}
+              className="share-fab"
+            >
+              <span className="share-fab-label">Share</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setShowComments((prev) => !prev)}
+              aria-expanded={showComments}
+              aria-controls="comment-drawer"
+              className={`comment-fab ${showComments ? 'is-open' : ''}`}
+            >
+              <span className="comment-fab-label">{showComments ? 'Close' : 'Comments'}</span>
+              {typeof rootCommentCount === 'number' && (
+                <span className="comment-fab-count">{rootCommentCount}</span>
+              )}
+            </button>
+          </>
         )}
 
         {typeof document !== 'undefined'
@@ -1451,6 +1473,36 @@ export default function QuestionDetail() {
                   </div>
                 </>
               )}
+            </div>
+          </div>
+        )}
+
+        {showVoteConfirm && (
+          <div className="vote-confirm-overlay" role="dialog" aria-modal="true" aria-label="Confirm your vote">
+            <div className="vote-confirm-card">
+              <p className="vote-confirm-kicker">Confirm vote</p>
+              <h2 className="vote-confirm-title">Submit this choice?</h2>
+              <p className="vote-confirm-copy">
+                After you submit, you cannot change your vote immediately. You can vote again after 1 day, and it will update your existing vote instead of creating a new one.
+              </p>
+              <div className="vote-confirm-actions">
+                <button
+                  type="button"
+                  onClick={handleConfirmVote}
+                  disabled={vote.isPending}
+                  className="vote-confirm-primary"
+                >
+                  {vote.isPending ? 'Sending vote...' : 'Yes, submit vote'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCancelVoteConfirm}
+                  disabled={vote.isPending}
+                  className="vote-confirm-secondary"
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
           </div>
         )}

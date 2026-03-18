@@ -69,26 +69,10 @@ export default function Register() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [countryCode, setCountryCode] = useState('TR')
-  const [countryQuery, setCountryQuery] = useState('')
   const [birthDate, setBirthDate] = useState('')
   const [gender, setGender] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [isSubmitting, setSubmitting] = useState(false)
-
-  const filteredCountryOptions = useMemo(() => {
-    const q = countryQuery.trim().toLowerCase()
-    if (!q) return countryOptions
-    return countryOptions.filter(
-      item => item.label.toLowerCase().includes(q) || item.code.toLowerCase().includes(q)
-    )
-  }, [countryOptions, countryQuery])
-
-  const countrySelectOptions = useMemo(() => {
-    const hasSelected = filteredCountryOptions.some(item => item.code === countryCode)
-    if (hasSelected || !countryCode) return filteredCountryOptions
-    const selected = countryOptions.find(item => item.code === countryCode)
-    return selected ? [selected, ...filteredCountryOptions] : filteredCountryOptions
-  }, [countryCode, countryOptions, filteredCountryOptions])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -106,6 +90,10 @@ export default function Register() {
       nav('/login', { replace: true, state: { message: verifyMessage } })
     } catch (err: any) {
       const msg = err?.response?.data?.message ?? err?.message ?? 'Sign up failed'
+      const suggestedCountryCode = err?.suggestedCountryCode
+      if (typeof suggestedCountryCode === 'string' && suggestedCountryCode.length === 2) {
+        setCountryCode(suggestedCountryCode)
+      }
       setError(msg)
       toast.error(msg)
     } finally {
@@ -165,20 +153,14 @@ export default function Register() {
             </div>
 
             <div>
-              <label className="label">Country (search + select)</label>
-              <input
-                className="input auth-input mb-2"
-                placeholder="Search country..."
-                value={countryQuery}
-                onChange={e => setCountryQuery(e.target.value)}
-              />
+              <label className="label">Country</label>
               <select
                 required
                 className="input auth-input"
                 value={countryCode}
                 onChange={e => setCountryCode(e.target.value)}
               >
-                {countrySelectOptions.map(opt => (
+                {countryOptions.map(opt => (
                   <option key={opt.code} value={opt.code}>{opt.label}</option>
                 ))}
               </select>

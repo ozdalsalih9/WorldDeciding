@@ -50,11 +50,17 @@ public sealed class GetQuestionSummaryHandler
             .Take(100)
             .ToListAsync(ct);
 
+        comments = comments
+            .Where(text => !string.IsNullOrWhiteSpace(text))
+            .Select(text => text.Trim())
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
         if (comments.Count == 0)
         {
             return new QuestionSummaryDto(
                 request.QuestionId,
-                "No comments yet.",
+                "No comments yet for this question.",
                 DateTime.UtcNow
             );
         }
@@ -120,6 +126,7 @@ public sealed class GetQuestionSummaryHandler
         existing.GeneratedAt = DateTime.UtcNow;
         existing.CommentCountAtGeneration = comments.Count;
         existing.IsStale = false;
+        existing.Model = "gemini";
 
         await _db.SaveChangesAsync(ct);
 
