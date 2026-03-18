@@ -7,6 +7,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
+using System.Net;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
@@ -23,6 +24,9 @@ namespace WorldDeciding.Controllers;
 [Route("api/[controller]")]
 public class AuthController : ControllerBase
 {
+    private const string CountryVerificationUnavailableMessage =
+        "We could not verify your country from your connection. Refresh the page and try again. If you are using a VPN or proxy, disable it first.";
+
     private readonly UserManager<AppUser> _users;
     private readonly IConfiguration _cfg;
     private readonly IMediator _mediator;
@@ -117,7 +121,7 @@ public class AuthController : ControllerBase
                 false,
                 resolved.confidence,
                 resolved.provider,
-                "We could not verify your country. Please disable VPN/proxy and refresh the page."
+                CountryVerificationUnavailableMessage
             ));
         }
 
@@ -646,15 +650,6 @@ public class AuthController : ControllerBase
             return null;
 
         var clientIp = _client.ClientIp;
-        if (clientIp is null)
-        {
-            _logger.LogWarning("Register country enforcement failed because client IP could not be resolved.");
-            return new
-            {
-                message = "We could not verify your country. Please disable VPN/proxy and try again.",
-                countryVerificationFailed = true
-            };
-        }
 
         try
         {
@@ -663,13 +658,15 @@ public class AuthController : ControllerBase
             if (!resolved.isUsable)
             {
                 _logger.LogInformation(
-                    "Register country enforcement blocked registration because country could not be verified. Provider={Provider} Confidence={Confidence} ClientIp={ClientIp}",
+                    "Register country enforcement blocked registration because country could not be verified. Provider={Provider} Confidence={Confidence} ClientIp={ClientIp} RemoteIp={RemoteIp} HeaderCountry={HeaderCountry}",
                     resolved.provider,
                     resolved.confidence,
-                    clientIp);
+                    clientIp,
+                    HttpContext.Connection.RemoteIpAddress,
+                    GetTrustedProxyCountryHeader());
                 return new
                 {
-                    message = "We could not verify your country. Please disable VPN/proxy and refresh the page.",
+                    message = CountryVerificationUnavailableMessage,
                     countryVerificationFailed = true
                 };
             }
@@ -699,7 +696,7 @@ public class AuthController : ControllerBase
             _logger.LogWarning(ex, "GeoIP lookup failed during registration country validation for IP {ClientIp}", clientIp);
             return new
             {
-                message = "We could not verify your country. Please disable VPN/proxy and refresh the page.",
+                message = CountryVerificationUnavailableMessage,
                 countryVerificationFailed = true
             };
         }
@@ -707,9 +704,22 @@ public class AuthController : ControllerBase
 
     private async Task<(string? countryCode, double confidence, string provider, bool isUsable)> ResolveCurrentCountryAsync(CancellationToken ct)
     {
+        var trustedHeaderCountry = GetTrustedProxyCountryHeader();
+        if (trustedHeaderCountry is not null)
+        {
+            _logger.LogDebug(
+                "Register country resolved from trusted proxy header. Country={CountryCode} RemoteIp={RemoteIp}",
+                trustedHeaderCountry,
+                HttpContext.Connection.RemoteIpAddress);
+            return (trustedHeaderCountry, 1.0, "TrustedProxyCountryHeader", true);
+        }
+
         var clientIp = _client.ClientIp;
         if (clientIp is null)
         {
+            _logger.LogDebug(
+                "Register country resolution could not determine client IP. RemoteIp={RemoteIp}",
+                HttpContext.Connection.RemoteIpAddress);
             return (null, 0.0, "ClientIpUnavailable", false);
         }
 
@@ -717,6 +727,16 @@ public class AuthController : ControllerBase
         var countryCode = NormalizeCountryCode(countryIso2);
         var minimumConfidence = GetRegisterCountryMinimumConfidence();
         var isUsable = countryCode is not null && confidence >= minimumConfidence;
+
+        _logger.LogDebug(
+            "Register country resolution result. ClientIp={ClientIp} RemoteIp={RemoteIp} CountryCode={CountryCode} Confidence={Confidence} Provider={Provider} IsUsable={IsUsable}",
+            clientIp,
+            HttpContext.Connection.RemoteIpAddress,
+            countryCode,
+            confidence,
+            provider,
+            isUsable);
+
         return (countryCode, confidence, provider, isUsable);
     }
 
@@ -729,6 +749,91 @@ public class AuthController : ControllerBase
     {
         var configured = _cfg.GetValue<double?>("GeoIp:MinimumCountryConfidence") ?? 0.6;
         return Math.Clamp(configured, 0.0, 1.0);
+    }
+
+    private string? GetTrustedProxyCountryHeader()
+    {
+        if (!CanTrustProxyMetadata())
+        {
+            return null;
+        }
+
+        var headerCandidates = new[]
+        {
+            ("CF-IPCountry", Request.Headers["CF-IPCountry"].FirstOrDefault()),
+            ("CloudFront-Viewer-Country", Request.Headers["CloudFront-Viewer-Country"].FirstOrDefault()),
+            ("X-AppEngine-Country", Request.Headers["X-AppEngine-Country"].FirstOrDefault()),
+            ("X-Country-Code", Request.Headers["X-Country-Code"].FirstOrDefault()),
+            ("X-Country", Request.Headers["X-Country"].FirstOrDefault()),
+            ("ClientContext", _client.DeclaredCountryIso2)
+        };
+
+        foreach (var (_, rawValue) in headerCandidates)
+        {
+            var normalized = NormalizeCountryCode(rawValue);
+            if (normalized is not null)
+            {
+                return normalized;
+            }
+        }
+
+        return null;
+    }
+
+    private bool CanTrustProxyMetadata()
+    {
+        var remoteIp = HttpContext.Connection.RemoteIpAddress;
+        if (remoteIp is null)
+        {
+            return false;
+        }
+
+        if (IsPrivateOrLoopback(remoteIp))
+        {
+            return true;
+        }
+
+        var trustedProxies = _cfg
+            .GetSection("Networking:TrustedProxies")
+            .Get<string[]>()?
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => value.Trim())
+            .ToArray()
+            ?? Array.Empty<string>();
+
+        foreach (var trustedProxy in trustedProxies)
+        {
+            if (IPAddress.TryParse(trustedProxy, out var parsedProxyIp) && parsedProxyIp.Equals(remoteIp))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool IsPrivateOrLoopback(IPAddress address)
+    {
+        if (IPAddress.IsLoopback(address))
+        {
+            return true;
+        }
+
+        if (address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6)
+        {
+            return address.IsIPv6LinkLocal || address.IsIPv6SiteLocal || address.IsIPv6UniqueLocal;
+        }
+
+        var bytes = address.GetAddressBytes();
+        return bytes[0] switch
+        {
+            10 => true,
+            127 => true,
+            169 when bytes[1] == 254 => true,
+            172 when bytes[1] >= 16 && bytes[1] <= 31 => true,
+            192 when bytes[1] == 168 => true,
+            _ => false
+        };
     }
 
     private static string? NormalizeCountryCode(string? countryCode)

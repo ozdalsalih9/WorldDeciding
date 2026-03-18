@@ -27,9 +27,14 @@ type CountryOption = {
 type RegisterCountryResponse = {
   countryCode?: string | null
   enforceCountryMatch?: boolean
+  canRegister?: boolean
   confidence?: number
   provider?: string
+  message?: string | null
 }
+
+const countryVerificationUnavailableMessage =
+  'We could not verify your country from your connection. Refresh the page and try again. If you are using a VPN or proxy, disable it first.'
 
 export default function Register() {
   const { register } = useAuth()
@@ -76,11 +81,12 @@ export default function Register() {
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [countryCode, setCountryCode] = useState('TR')
+  const [countryCode, setCountryCode] = useState('')
   const [birthDate, setBirthDate] = useState('')
   const [gender, setGender] = useState(0)
   const [detectedCountryCode, setDetectedCountryCode] = useState<string | null>(null)
   const [isCountryMatchRequired, setIsCountryMatchRequired] = useState(false)
+  const [canRegisterByCountryCheck, setCanRegisterByCountryCheck] = useState(false)
   const [isResolvingCountry, setIsResolvingCountry] = useState(true)
   const [suggestedCountryCode, setSuggestedCountryCode] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -99,22 +105,41 @@ export default function Register() {
         const responseData = (res.data ?? {}) as RegisterCountryResponse
         const detected = responseData.countryCode?.trim().toUpperCase() || null
         const enforce = Boolean(responseData.enforceCountryMatch)
+        const canRegister = responseData.canRegister !== false
+        const responseMessage =
+          typeof responseData.message === 'string' && responseData.message.trim()
+            ? responseData.message.trim()
+            : null
 
         setDetectedCountryCode(detected)
         setIsCountryMatchRequired(enforce)
+        setCanRegisterByCountryCheck(canRegister)
 
         if (detected) {
           setCountryCode(detected)
           setSuggestedCountryCode(detected)
+          setError(null)
         }
-        if (!detected && enforce) {
-          setError('We could not verify your country. Please disable VPN/proxy and refresh the page.')
+
+        if (!detected) {
+          setSuggestedCountryCode(null)
+        }
+
+        if (!canRegister) {
+          setError(responseMessage ?? countryVerificationUnavailableMessage)
+        } else if (!detected && enforce) {
+          setError(responseMessage ?? countryVerificationUnavailableMessage)
+        } else {
+          setError(null)
         }
       } catch {
         if (!ignore) {
           setDetectedCountryCode(null)
           setIsCountryMatchRequired(true)
-          setError('We could not verify your country. Please disable VPN/proxy and refresh the page.')
+          setCanRegisterByCountryCheck(false)
+          setSuggestedCountryCode(null)
+          setCountryCode('')
+          setError(countryVerificationUnavailableMessage)
         }
       } finally {
         if (!ignore) {
@@ -138,7 +163,7 @@ export default function Register() {
   const isCountryVerificationBlocked =
     isCountryMatchRequired &&
     !isResolvingCountry &&
-    !detectedCountryCode
+    !canRegisterByCountryCheck
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -241,6 +266,7 @@ export default function Register() {
                   setError(null)
                 }}
               >
+                <option value="" disabled>Select your country</option>
                 {countryOptions.map(opt => (
                   <option key={opt.code} value={opt.code}>{opt.label}</option>
                 ))}
