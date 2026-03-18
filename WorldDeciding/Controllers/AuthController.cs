@@ -26,6 +26,8 @@ public class AuthController : ControllerBase
 {
     private const string CountryVerificationUnavailableMessage =
         "We could not verify your country from your connection. Refresh the page and try again. If you are using a VPN or proxy, disable it first.";
+    private const string CountryVerificationUnavailableSoftMessage =
+        "Automatic country verification is temporarily unavailable. You can continue, but if your country can be verified during signup it must match your selection.";
 
     private readonly UserManager<AppUser> _users;
     private readonly IConfiguration _cfg;
@@ -112,16 +114,19 @@ public class AuthController : ControllerBase
     {
         var enforcement = IsRegisterCountryMatchEnforced();
         var resolved = await ResolveCurrentCountryAsync(ct);
+        var blockOnVerificationFailure = ShouldBlockOnCountryVerificationFailure();
 
         if (enforcement && !resolved.isUsable)
         {
             return Ok(new RegisterCountryRes(
                 null,
                 true,
-                false,
+                !blockOnVerificationFailure,
                 resolved.confidence,
                 resolved.provider,
-                CountryVerificationUnavailableMessage
+                blockOnVerificationFailure
+                    ? CountryVerificationUnavailableMessage
+                    : CountryVerificationUnavailableSoftMessage
             ));
         }
 
@@ -657,6 +662,18 @@ public class AuthController : ControllerBase
 
             if (!resolved.isUsable)
             {
+                if (!ShouldBlockOnCountryVerificationFailure())
+                {
+                    _logger.LogWarning(
+                        "Register country verification unavailable; allowing registration without hard block. Provider={Provider} Confidence={Confidence} ClientIp={ClientIp} RemoteIp={RemoteIp} HeaderCountry={HeaderCountry}",
+                        resolved.provider,
+                        resolved.confidence,
+                        clientIp,
+                        HttpContext.Connection.RemoteIpAddress,
+                        GetTrustedProxyCountryHeader());
+                    return null;
+                }
+
                 _logger.LogInformation(
                     "Register country enforcement blocked registration because country could not be verified. Provider={Provider} Confidence={Confidence} ClientIp={ClientIp} RemoteIp={RemoteIp} HeaderCountry={HeaderCountry}",
                     resolved.provider,
@@ -694,6 +711,11 @@ public class AuthController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "GeoIP lookup failed during registration country validation for IP {ClientIp}", clientIp);
+            if (!ShouldBlockOnCountryVerificationFailure())
+            {
+                return null;
+            }
+
             return new
             {
                 message = CountryVerificationUnavailableMessage,
@@ -749,6 +771,11 @@ public class AuthController : ControllerBase
     {
         var configured = _cfg.GetValue<double?>("GeoIp:MinimumCountryConfidence") ?? 0.6;
         return Math.Clamp(configured, 0.0, 1.0);
+    }
+
+    private bool ShouldBlockOnCountryVerificationFailure()
+    {
+        return _cfg.GetValue<bool?>("GeoIp:BlockOnVerificationFailure") ?? false;
     }
 
     private string? GetTrustedProxyCountryHeader()

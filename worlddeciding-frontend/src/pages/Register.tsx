@@ -128,7 +128,7 @@ export default function Register() {
         if (!canRegister) {
           setError(responseMessage ?? countryVerificationUnavailableMessage)
         } else if (!detected && enforce) {
-          setError(responseMessage ?? countryVerificationUnavailableMessage)
+          setError(null)
         } else {
           setError(null)
         }
@@ -136,10 +136,9 @@ export default function Register() {
         if (!ignore) {
           setDetectedCountryCode(null)
           setIsCountryMatchRequired(true)
-          setCanRegisterByCountryCheck(false)
+          setCanRegisterByCountryCheck(true)
           setSuggestedCountryCode(null)
-          setCountryCode('')
-          setError(countryVerificationUnavailableMessage)
+          setError(null)
         }
       } finally {
         if (!ignore) {
