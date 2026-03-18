@@ -93,8 +93,10 @@ public class AuthController : ControllerBase
     public record RegisterCountryRes(
         string? CountryCode,
         bool EnforceCountryMatch,
+        bool CanRegister,
         double Confidence,
-        string Provider
+        string Provider,
+        string? Message
     );
 
     // ==== Endpoints ====
@@ -107,11 +109,26 @@ public class AuthController : ControllerBase
         var enforcement = IsRegisterCountryMatchEnforced();
         var resolved = await ResolveCurrentCountryAsync(ct);
 
+        if (enforcement && !resolved.isUsable)
+        {
+            return Ok(new RegisterCountryRes(
+                null,
+                true,
+                false,
+                resolved.confidence,
+                resolved.provider,
+                "We could not verify your country. Please disable VPN/proxy and refresh the page."
+            ));
+        }
+
         return Ok(new RegisterCountryRes(
             resolved.countryCode,
             enforcement,
+            true,
             resolved.confidence,
-            resolved.provider));
+            resolved.provider,
+            resolved.countryCode is null ? null : $"Detected country: {resolved.countryCode}"
+        ));
     }
 
     [HttpPost("register")]
@@ -631,35 +648,33 @@ public class AuthController : ControllerBase
         var clientIp = _client.ClientIp;
         if (clientIp is null)
         {
-            _logger.LogDebug("Skipping register country enforcement because client IP could not be resolved.");
-            return null;
+            _logger.LogWarning("Register country enforcement failed because client IP could not be resolved.");
+            return new
+            {
+                message = "We could not verify your country. Please disable VPN/proxy and try again.",
+                countryVerificationFailed = true
+            };
         }
 
         try
         {
-            var (inferredCountryCode, confidence, provider) = await ResolveCurrentCountryAsync(ct);
-            var minimumConfidence = GetRegisterCountryMinimumConfidence();
+            var resolved = await ResolveCurrentCountryAsync(ct);
 
-            if (inferredCountryCode is null)
+            if (!resolved.isUsable)
             {
                 _logger.LogInformation(
-                    "Skipping register country enforcement because GeoIP returned no country. Provider={Provider} ClientIp={ClientIp}",
-                    provider,
+                    "Register country enforcement blocked registration because country could not be verified. Provider={Provider} Confidence={Confidence} ClientIp={ClientIp}",
+                    resolved.provider,
+                    resolved.confidence,
                     clientIp);
-                return null;
+                return new
+                {
+                    message = "We could not verify your country. Please disable VPN/proxy and refresh the page.",
+                    countryVerificationFailed = true
+                };
             }
 
-            if (confidence < minimumConfidence)
-            {
-                _logger.LogInformation(
-                    "Skipping register country enforcement because GeoIP confidence is below threshold. Provider={Provider} Confidence={Confidence} Threshold={Threshold} ClientIp={ClientIp} Country={Country}",
-                    provider,
-                    confidence,
-                    minimumConfidence,
-                    clientIp,
-                    inferredCountryCode);
-                return null;
-            }
+            var inferredCountryCode = resolved.countryCode!;
 
             if (string.Equals(selectedCountryCode, inferredCountryCode, StringComparison.OrdinalIgnoreCase))
                 return null;
@@ -668,8 +683,8 @@ public class AuthController : ControllerBase
                 "Registration country mismatch detected. Selected={SelectedCountry} Inferred={InferredCountry} Provider={Provider} Confidence={Confidence} ClientIp={ClientIp}",
                 selectedCountryCode,
                 inferredCountryCode,
-                provider,
-                confidence,
+                resolved.provider,
+                resolved.confidence,
                 clientIp);
 
             return new
@@ -682,20 +697,27 @@ public class AuthController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "GeoIP lookup failed during registration country validation for IP {ClientIp}", clientIp);
-            return null;
+            return new
+            {
+                message = "We could not verify your country. Please disable VPN/proxy and refresh the page.",
+                countryVerificationFailed = true
+            };
         }
     }
 
-    private async Task<(string? countryCode, double confidence, string provider)> ResolveCurrentCountryAsync(CancellationToken ct)
+    private async Task<(string? countryCode, double confidence, string provider, bool isUsable)> ResolveCurrentCountryAsync(CancellationToken ct)
     {
         var clientIp = _client.ClientIp;
         if (clientIp is null)
         {
-            return (null, 0.0, "ClientIpUnavailable");
+            return (null, 0.0, "ClientIpUnavailable", false);
         }
 
         var (countryIso2, confidence, provider) = await _geo.ResolveAsync(clientIp, ct);
-        return (NormalizeCountryCode(countryIso2), confidence, provider);
+        var countryCode = NormalizeCountryCode(countryIso2);
+        var minimumConfidence = GetRegisterCountryMinimumConfidence();
+        var isUsable = countryCode is not null && confidence >= minimumConfidence;
+        return (countryCode, confidence, provider, isUsable);
     }
 
     private bool IsRegisterCountryMatchEnforced()

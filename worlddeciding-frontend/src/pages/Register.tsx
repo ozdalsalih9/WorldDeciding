@@ -107,10 +107,14 @@ export default function Register() {
           setCountryCode(detected)
           setSuggestedCountryCode(detected)
         }
+        if (!detected && enforce) {
+          setError('We could not verify your country. Please disable VPN/proxy and refresh the page.')
+        }
       } catch {
         if (!ignore) {
           setDetectedCountryCode(null)
-          setIsCountryMatchRequired(false)
+          setIsCountryMatchRequired(true)
+          setError('We could not verify your country. Please disable VPN/proxy and refresh the page.')
         }
       } finally {
         if (!ignore) {
@@ -130,6 +134,11 @@ export default function Register() {
     isCountryMatchRequired &&
     !!detectedCountryCode &&
     countryCode.trim().toUpperCase() !== detectedCountryCode
+
+  const isCountryVerificationBlocked =
+    isCountryMatchRequired &&
+    !isResolvingCountry &&
+    !detectedCountryCode
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -252,6 +261,11 @@ export default function Register() {
                   You can only register with your detected country: {detectedCountryCode}.
                 </p>
               ) : null}
+              {isCountryVerificationBlocked ? (
+                <p className="mt-1 text-xs font-semibold text-rose-600">
+                  Country verification is required before registration can continue.
+                </p>
+              ) : null}
               <p className="mt-1 text-xs text-muted">This country selection is permanent after account creation.</p>
             </div>
 
@@ -288,7 +302,7 @@ export default function Register() {
             <div className="auth-col-span-2 auth-actions">
               <button
                 type="submit"
-                disabled={isSubmitting || isResolvingCountry || hasCountryMismatch}
+                disabled={isSubmitting || isResolvingCountry || hasCountryMismatch || isCountryVerificationBlocked}
                 className="btn-primary w-full sm:w-auto"
               >
                 {isSubmitting ? 'Signing up...' : 'Sign up'}
