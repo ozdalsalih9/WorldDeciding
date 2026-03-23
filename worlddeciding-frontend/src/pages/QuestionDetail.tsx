@@ -940,7 +940,11 @@ export default function QuestionDetail() {
                 <h1 className="two-split-question">{question.data.title}</h1>
               </div>
 
-              <div role="radiogroup" aria-label="Question options" className="two-split-panels">
+              <div
+                role="radiogroup"
+                aria-label="Question options"
+                className={`two-split-panels ${selected ? 'has-selection' : ''}`}
+              >
                 <div className="two-split-center-badge" aria-hidden>
                   VS
                 </div>
@@ -966,6 +970,9 @@ export default function QuestionDetail() {
                     >
                       <span className="two-split-panel-noise" aria-hidden />
                       <span className="two-split-panel-scan" aria-hidden />
+                      <span className={`two-split-panel-marker ${isSelected ? 'is-selected' : ''}`}>
+                        {isSelected ? 'Selected' : 'Choose'}
+                      </span>
                       <div className="two-split-panel-inner">
                         <span className="two-split-side-badge">{sideLabel}</span>
                         <p className="two-split-option">{option.text}</p>

@@ -3,6 +3,7 @@ using Microsoft.Extensions.Caching.Distributed;
 using System.Text.Json;
 using WorldDeciding.Application.Common.Abuse;
 using WorldDeciding.Application.Common.Interfaces;
+using WorldDeciding.Application.Common.Questions.Live;
 using WorldDeciding.Domain.Entities;
 using WorldDeciding.Infrastructure.Persistence;
 
@@ -61,10 +62,9 @@ public class LiveQuestionService : ILiveQuestionService
 
         // === Cache ===
         var now = DateTime.UtcNow;
-        var bucket = GetBucket(now);
-        var rotatesAt = GetBucketEndUtc(now);
+        var rotatesAt = LiveQuestionCacheKeys.GetBucketEndUtc(now);
 
-        var cacheKey = $"live:question:{bucket}";
+        var cacheKey = LiveQuestionCacheKeys.ForUtcNow(now);
         var cached = await _cache.GetStringAsync(cacheKey, ct);
 
         if (!string.IsNullOrWhiteSpace(cached))
@@ -72,23 +72,35 @@ public class LiveQuestionService : ILiveQuestionService
             var cachedDto = JsonSerializer.Deserialize<LiveQuestionDto>(cached);
             if (cachedDto is not null)
             {
-                // Cache hit olsa da view say (abuse değilse)
-                if (allowViewWrite)
-                    await TryRecordViewAsync(cachedDto.QuestionId, ipHash, ct);
+                var isStillLive = await _db.Questions
+                    .AsNoTracking()
+                    .AnyAsync(q => q.Id == cachedDto.QuestionId && q.Status == QuestionStatus.Published, ct);
 
-                return cachedDto;
+                if (!isStillLive)
+                {
+                    await _cache.RemoveAsync(cacheKey, ct);
+                }
+                else
+                {
+                    // Cache hit olsa da view say (abuse degilse)
+                    if (allowViewWrite)
+                        await TryRecordViewAsync(cachedDto.QuestionId, ipHash, ct);
+
+                    return cachedDto;
+                }
             }
         }
 
         // Seed: bucket'a göre deterministik
-        var seed = bucket.ToString();
+        var seed = LiveQuestionCacheKeys.GetBucket(now).ToString();
 
-        // 1) Sadece Binary sorulardan 1 tane seç (deterministik random)
+        // 1) Sadece yayinda olan Binary sorulardan 1 tane sec (deterministic random)
         var q = await _db.Questions
             .FromSqlInterpolated($@"
                 SELECT *
                 FROM ""Questions""
                 WHERE ""Type"" = {(short)QuestionType.Binary}
+                  AND ""Status"" = {(int)QuestionStatus.Published}
                 ORDER BY md5(""Id""::text || {seed})
                 LIMIT 1
             ")
@@ -162,18 +174,5 @@ public class LiveQuestionService : ILiveQuestionService
             // Büyük ihtimalle unique constraint (aynı gün aynı IP) — bu beklenen bir durum.
             // İstersen burada provider'a göre (Postgres) daha spesifik unique-violation kontrolü yaparız.
         }
-    }
-
-    private static long GetBucket(DateTime utcNow)
-    {
-        var epoch = new DateTimeOffset(utcNow).ToUnixTimeSeconds();
-        return epoch / 300; // 5 dk
-    }
-
-    private static DateTime GetBucketEndUtc(DateTime utcNow)
-    {
-        var epoch = new DateTimeOffset(utcNow).ToUnixTimeSeconds();
-        var bucketEnd = ((epoch / 300) + 1) * 300;
-        return DateTimeOffset.FromUnixTimeSeconds(bucketEnd).UtcDateTime;
     }
 }

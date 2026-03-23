@@ -618,78 +618,80 @@ public class AuthController : ControllerBase
     <head>
       <meta charset="utf-8" />
       <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <meta name="x-apple-disable-message-reformatting" />
+      <meta name="format-detection" content="telephone=no,date=no,address=no,email=no,url=no" />
       <title>{safeTitle}</title>
     </head>
-    <body style="margin:0;padding:0;background:#eaf2ff;font-family:Arial,Helvetica,sans-serif;color:#0f172a;">
-      <div style="display:none;max-height:0;overflow:hidden;opacity:0;mso-hide:all;">
+    <body style="margin:0;padding:0;background-color:#edf4ff;font-family:Arial,Helvetica,sans-serif;color:#0f172a;">
+      <div style="display:none;font-size:1px;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;mso-hide:all;">
         {safePreheader}
       </div>
-      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:
-        radial-gradient(circle at top, rgba(79,116,230,0.16), transparent 38%),
-        linear-gradient(180deg, #edf5ff 0%, #e7f0ff 100%);
-        margin:0;padding:32px 12px;">
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%;margin:0;padding:0;border-collapse:collapse;background-color:#edf4ff;">
         <tr>
-          <td align="center">
-            <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="max-width:680px;">
+          <td align="center" style="padding:20px 12px;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%;max-width:600px;border-collapse:collapse;">
               <tr>
-                <td style="padding-bottom:14px;text-align:center;">
-                  <span style="display:inline-block;padding:8px 14px;border-radius:999px;background:rgba(255,255,255,0.72);border:1px solid rgba(148,163,184,0.18);color:#35507a;font-size:11px;font-weight:800;letter-spacing:0.28em;text-transform:uppercase;">
+                <td align="center" style="padding:0 0 14px 0;">
+                  <span style="display:inline-block;padding:8px 14px;border-radius:999px;background-color:#ffffff;border:1px solid #d6e2f5;color:#35507a;font-size:11px;font-weight:700;letter-spacing:0.18em;text-transform:uppercase;">
                     WorldDeciding
                   </span>
                 </td>
               </tr>
               <tr>
-                <td style="border-radius:28px;padding:1px;background:linear-gradient(135deg, {safeAccentA}, {safeAccentB});box-shadow:0 28px 80px rgba(15,23,42,0.14);">
-                  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:
-                    radial-gradient(circle at top left, rgba(79,116,230,0.14), transparent 34%),
-                    linear-gradient(180deg, rgba(255,255,255,0.98), rgba(241,247,255,0.96));
-                    border-radius:27px;">
+                <td style="border-radius:24px;background-color:#ffffff;border:1px solid #d6e2f5;box-shadow:0 12px 30px rgba(15,23,42,0.10);overflow:hidden;">
+                  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%;border-collapse:collapse;background-color:#ffffff;">
                     <tr>
-                      <td style="padding:34px 30px 18px;">
-                        <div style="display:inline-block;padding:8px 14px;border-radius:999px;background:rgba(79,116,230,0.1);color:#31527e;font-size:12px;font-weight:800;letter-spacing:0.18em;text-transform:uppercase;">
+                      <td style="height:6px;line-height:6px;font-size:0;background-color:{safeAccentA};">
+                        &nbsp;
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="padding:28px 22px 14px 22px;">
+                        <div style="display:inline-block;padding:7px 12px;border-radius:999px;background-color:#eef3ff;color:#31527e;font-size:11px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;">
                           {safeEyebrow}
                         </div>
-                        <h1 style="margin:18px 0 12px;font-size:34px;line-height:1.12;color:#0b1726;font-weight:800;">
+                        <h1 style="margin:18px 0 12px 0;font-size:30px;line-height:1.2;color:#0b1726;font-weight:700;">
                           {safeTitle}
                         </h1>
-                        <p style="margin:0;font-size:16px;line-height:1.75;color:#4a6287;">
+                        <p style="margin:0;font-size:16px;line-height:1.7;color:#4a6287;">
                           {safeLead}
                         </p>
                       </td>
                     </tr>
                     <tr>
-                      <td style="padding:0 30px 10px;">
-                        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+                      <td style="padding:0 22px 10px 22px;">
+                        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%;border-collapse:collapse;">
                           <tr>
-                            <td style="padding:18px;border-radius:24px;background:
-                              linear-gradient(135deg, rgba(79,116,230,0.08), rgba(34,211,238,0.08)),
-                              rgba(255,255,255,0.78);
-                              border:1px solid rgba(148,163,184,0.18);">
+                            <td style="padding:18px;border-radius:18px;background-color:#f7faff;border:1px solid #dce7f6;">
                               <div style="font-size:13px;line-height:1.7;color:#4a6287;">
                                 Secure account action for WorldDeciding.
                               </div>
-                              <div style="padding-top:18px;">
-                                <a href="{safeActionUrl}" style="display:inline-block;padding:14px 24px;border-radius:14px;background:linear-gradient(135deg, {safeAccentA}, {safeAccentB});color:#ffffff;text-decoration:none;font-size:15px;font-weight:800;letter-spacing:0.02em;box-shadow:0 18px 36px rgba(79,116,230,0.22);">
-                                  {safeActionLabel}
-                                </a>
-                              </div>
+                              <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-top:18px;border-collapse:separate;">
+                                <tr>
+                                  <td align="center" style="border-radius:14px;background-color:{safeAccentA};">
+                                    <a href="{safeActionUrl}" style="display:block;padding:14px 22px;border-radius:14px;background-color:{safeAccentA};color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;letter-spacing:0.01em;">
+                                      {safeActionLabel}
+                                    </a>
+                                  </td>
+                                </tr>
+                              </table>
                             </td>
                           </tr>
                         </table>
                       </td>
                     </tr>
                     <tr>
-                      <td style="padding:12px 30px 10px;">
-                        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+                      <td style="padding:12px 22px 10px 22px;">
+                        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%;border-collapse:collapse;">
                           <tr>
-                            <td style="padding:18px 18px 16px;border-radius:22px;background:rgba(255,255,255,0.82);border:1px solid rgba(148,163,184,0.18);">
-                              <div style="font-size:12px;font-weight:800;letter-spacing:0.18em;text-transform:uppercase;color:#3b5b86;">
+                            <td style="padding:18px 16px 16px 16px;border-radius:18px;background-color:#ffffff;border:1px solid #dce7f6;">
+                              <div style="font-size:12px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:#3b5b86;">
                                 {safeHelperTitle}
                               </div>
-                              <p style="margin:10px 0 0;font-size:14px;line-height:1.7;color:#5a7195;">
+                              <p style="margin:10px 0 0 0;font-size:14px;line-height:1.7;color:#5a7195;">
                                 {safeHelperCopy}
                               </p>
-                              <div style="margin-top:14px;padding:14px 16px;border-radius:16px;background:#f8fbff;border:1px solid rgba(173,201,229,0.4);font-size:13px;line-height:1.7;color:#0f2742;word-break:break-all;">
+                              <div style="margin-top:14px;padding:14px 16px;border-radius:14px;background-color:#f8fbff;border:1px solid #d6e2f5;font-size:13px;line-height:1.7;color:#0f2742;word-break:break-word;">
                                 {safeHelperValue}
                               </div>
                             </td>
@@ -698,14 +700,14 @@ public class AuthController : ControllerBase
                       </td>
                     </tr>
                     <tr>
-                      <td style="padding:10px 30px 34px;">
-                        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+                      <td style="padding:10px 22px 28px 22px;">
+                        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%;border-collapse:collapse;">
                           <tr>
-                            <td style="padding:16px 18px;border-radius:20px;background:rgba(15,23,42,0.03);border:1px solid rgba(148,163,184,0.14);">
-                              <div style="font-size:12px;font-weight:800;letter-spacing:0.18em;text-transform:uppercase;color:#304f78;">
+                            <td style="padding:16px;border-radius:18px;background-color:#f7faff;border:1px solid #dce7f6;">
+                              <div style="font-size:12px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:#304f78;">
                                 {safeNoteTitle}
                               </div>
-                              <p style="margin:10px 0 0;font-size:14px;line-height:1.7;color:#617795;">
+                              <p style="margin:10px 0 0 0;font-size:14px;line-height:1.7;color:#617795;">
                                 {safeNoteCopy}
                               </p>
                             </td>
@@ -717,7 +719,7 @@ public class AuthController : ControllerBase
                 </td>
               </tr>
               <tr>
-                <td style="padding:16px 10px 0;text-align:center;font-size:12px;line-height:1.7;color:#6f85a6;">
+                <td style="padding:14px 16px 0 16px;text-align:center;font-size:12px;line-height:1.7;color:#6f85a6;">
                   WorldDeciding account security email. Please do not reply to this automated message.
                 </td>
               </tr>
