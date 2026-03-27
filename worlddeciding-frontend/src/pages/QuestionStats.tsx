@@ -24,6 +24,8 @@ type CountryCompareResponse = {
   left: CountryCompareBucket
   right: CountryCompareBucket
   global: CountryCompareBucket
+  aiSummary: string
+  aiGeneratedAt: string
 }
 
 const COUNTRY_PAGE_SIZE = 8
@@ -67,7 +69,28 @@ function normalizeCompareResponse(input: any, leftCode: string, rightCode: strin
     left: normalizeCompareBucket(input?.left ?? input?.Left ?? input?.leftBucket ?? input?.LeftBucket, leftCode),
     right: normalizeCompareBucket(input?.right ?? input?.Right ?? input?.rightBucket ?? input?.RightBucket, rightCode),
     global: normalizeCompareBucket(input?.global ?? input?.Global ?? input?.globalBucket ?? input?.GlobalBucket, 'GLOBAL'),
+    aiSummary: String(input?.aiSummary ?? input?.AiSummary ?? ''),
+    aiGeneratedAt: String(input?.aiGeneratedAt ?? input?.AiGeneratedAt ?? ''),
   }
+}
+
+const formatTimestamp = (value?: string) => {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  return date.toLocaleString()
+}
+
+const normalizeInsightLines = (text: string) =>
+  text
+    .split('\n')
+    .map(line => line.trim())
+    .filter(Boolean)
+
+const getLeaderMargin = (bucket: CountryCompareBucket) => {
+  const top = bucket.options[0]?.percentage ?? 0
+  const runnerUp = bucket.options[1]?.percentage ?? 0
+  return Math.max(0, Math.round(top - runnerUp))
 }
 
 export default function QuestionStatsPage() {
@@ -269,6 +292,13 @@ export default function QuestionStatsPage() {
     setSelectedCountries([])
   }
 
+  const compareSelectionCopy =
+    selectedCountries.length === 0
+      ? 'Pick the first country to start a head-to-head comparison.'
+      : selectedCountries.length === 1
+        ? `${selectedCountries[0]} selected. Pick one more country to open the compare panel.`
+        : `${selectedCountries[0]} and ${selectedCountries[1]} are ready to compare.`
+
   const handleCountrySelect = (countryCode: string) => {
     if (selectedCountries.includes(countryCode)) {
       const next = selectedCountries.filter(code => code !== countryCode)
@@ -351,6 +381,31 @@ export default function QuestionStatsPage() {
       return best
     }, null)
 
+    const overlapScore = Math.round(
+      duelRows.reduce((sum, row) => sum + Math.min(row.leftPercentage, row.rightPercentage), 0)
+    )
+    const leftDistanceFromGlobal = duelRows.reduce(
+      (sum, row) => sum + Math.abs(row.leftPercentage - row.globalPercentage),
+      0
+    )
+    const rightDistanceFromGlobal = duelRows.reduce(
+      (sum, row) => sum + Math.abs(row.rightPercentage - row.globalPercentage),
+      0
+    )
+    const closestToGlobalLabel =
+      leftDistanceFromGlobal === rightDistanceFromGlobal
+        ? 'Tie'
+        : leftDistanceFromGlobal < rightDistanceFromGlobal
+          ? data.left.countryCode
+          : data.right.countryCode
+    const closestToGlobalNote =
+      leftDistanceFromGlobal === rightDistanceFromGlobal
+        ? 'Both countries track the global split equally closely.'
+        : leftDistanceFromGlobal < rightDistanceFromGlobal
+          ? `${data.left.countryCode} is closer to the global baseline.`
+          : `${data.right.countryCode} is closer to the global baseline.`
+    const compareNarrativeLines = normalizeInsightLines(data.aiSummary)
+
     return (
       <>
         <div className="country-compare-insights">
@@ -358,25 +413,64 @@ export default function QuestionStatsPage() {
             <p className="country-compare-insight-kicker">{data.left.countryCode}</p>
             <p className="country-compare-insight-value">{data.left.total}</p>
             <p className="country-compare-insight-meta">{leftShare}% of selected sample</p>
-            <p className="country-compare-insight-note">Top: {resolveTopOptionText(data.left)}</p>
+            <p className="country-compare-insight-note">
+              Top: {resolveTopOptionText(data.left)}. Leader margin: {getLeaderMargin(data.left)} pts.
+            </p>
           </article>
 
           <article className="country-compare-insight right">
             <p className="country-compare-insight-kicker">{data.right.countryCode}</p>
             <p className="country-compare-insight-value">{data.right.total}</p>
             <p className="country-compare-insight-meta">{rightShare}% of selected sample</p>
-            <p className="country-compare-insight-note">Top: {resolveTopOptionText(data.right)}</p>
+            <p className="country-compare-insight-note">
+              Top: {resolveTopOptionText(data.right)}. Leader margin: {getLeaderMargin(data.right)} pts.
+            </p>
           </article>
 
           <article className="country-compare-insight neutral">
-            <p className="country-compare-insight-kicker">Most polarized option</p>
+            <p className="country-compare-insight-kicker">Biggest split</p>
             <p className="country-compare-insight-value">
               {strongestShift ? `${Math.abs(strongestShift.swing)} pts` : '0 pts'}
             </p>
             <p className="country-compare-insight-meta">{strongestShift?.label ?? 'No option data yet'}</p>
             <p className="country-compare-insight-note">Global total: {data.global.total} votes</p>
           </article>
+
+          <article className="country-compare-insight neutral">
+            <p className="country-compare-insight-kicker">Overlap score</p>
+            <p className="country-compare-insight-value">{overlapScore} pts</p>
+            <p className="country-compare-insight-meta">Closer to 100 means similar option preferences</p>
+            <p className="country-compare-insight-note">Useful for spotting whether the two countries mostly agree.</p>
+          </article>
+
+          <article className="country-compare-insight neutral">
+            <p className="country-compare-insight-kicker">Closest to global</p>
+            <p className="country-compare-insight-value">{closestToGlobalLabel}</p>
+            <p className="country-compare-insight-meta">{closestToGlobalNote}</p>
+            <p className="country-compare-insight-note">
+              Best distance from global split: {Math.round(Math.min(leftDistanceFromGlobal, rightDistanceFromGlobal))} pts.
+            </p>
+          </article>
         </div>
+
+        <section className="country-compare-ai" aria-label="AI comparison insight">
+          <div className="country-compare-ai-head">
+            <div>
+              <p className="country-compare-ai-kicker">AI comparison take</p>
+              <h3 className="country-compare-ai-title">Why the vote split might look this way</h3>
+            </div>
+            {data.aiGeneratedAt ? (
+              <span className="country-compare-ai-generated">Updated {formatTimestamp(data.aiGeneratedAt)}</span>
+            ) : null}
+          </div>
+          <div className="country-compare-ai-body">
+            {compareNarrativeLines.length > 0 ? (
+              compareNarrativeLines.map((line, index) => <p key={`${index}-${line}`}>{line}</p>)
+            ) : (
+              <p>AI insight is unavailable right now.</p>
+            )}
+          </div>
+        </section>
 
         <section className="country-duel-board" aria-label="Option by option comparison">
           <div className="country-duel-head">
@@ -442,23 +536,6 @@ export default function QuestionStatsPage() {
             <span className="country-compare-total">0</span>
           </div>
           <p className="country-compare-note">There is no vote data for this country on this question yet.</p>
-        </div>
-      )
-    }
-
-    if (bucket.suppressed) {
-      return (
-        <div className={`country-compare-card ${variant}`}>
-          <div className="country-compare-card-header">
-            <div>
-              <p className="country-compare-kicker">{bucket.countryCode}</p>
-              <h3 className="country-compare-title">Protected sample</h3>
-            </div>
-            <span className="country-compare-total">{bucket.total}</span>
-          </div>
-          <p className="country-compare-note">
-            There are votes recorded, but the sample is too small to show option-level details.
-          </p>
         </div>
       )
     }
@@ -659,9 +736,13 @@ export default function QuestionStatsPage() {
                   </div>
                   <span className="text-xs text-muted">{stats.isFetching ? 'Updating...' : 'Live'}</span>
                 </div>
-                <p className="stats-compare-hint">
-                  Select two countries to compare their option split.
-                </p>
+                <div className="stats-compare-banner">
+                  <p className="stats-compare-label">Country compare available</p>
+                  <p className="stats-compare-hint">
+                    Pick any two countries below to open an instant comparison with option split, overlap score, and AI context.
+                  </p>
+                  <p className="stats-compare-selection">{compareSelectionCopy}</p>
+                </div>
 
                 {countryStats.length === 0 ? (
                   <p className="text-sm text-muted">No country data yet.</p>
@@ -744,6 +825,11 @@ export default function QuestionStatsPage() {
                     <p className="text-lg font-semibold text-strong">{countryStats.length}</p>
                     <p className="text-sm text-muted">Participating countries</p>
                   </div>
+                  <div className="stats-mini-card">
+                    <p className="text-xs uppercase tracking-[0.3em] text-muted">Country compare</p>
+                    <p className="text-lg font-semibold text-strong">{selectedCountries.length}/2 selected</p>
+                    <p className="text-sm text-muted">{compareSelectionCopy}</p>
+                  </div>
                 </div>
               </div>
             </div>
@@ -766,7 +852,7 @@ export default function QuestionStatsPage() {
                     {selectedCountries[0]} vs {selectedCountries[1]}
                   </h2>
                   <p className="country-compare-modal-note">
-                    Compare how these countries distributed votes across the same question.
+                    Compare how these countries distributed votes across the same question, then read the AI context for why the split may differ.
                   </p>
                 </div>
                 <button type="button" onClick={closeCompareModal} className="country-compare-close" aria-label="Close comparison">

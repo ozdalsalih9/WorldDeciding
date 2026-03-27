@@ -3680,9 +3680,32 @@
 }
 
 .stats-compare-hint {
-  margin-top: 10px;
   font-size: 0.8rem;
   color: #4b6b92;
+}
+
+.stats-compare-banner {
+  margin-top: 10px;
+  border-radius: 16px;
+  border: 1px solid rgba(173, 201, 229, 0.34);
+  padding: 12px 14px;
+  background:
+    radial-gradient(120% 140% at 0% 0%, rgba(79,116,230,0.14), transparent 56%),
+    linear-gradient(165deg, rgba(255,255,255,0.86), rgba(240, 248, 255, 0.88));
+}
+
+.stats-compare-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: #3c5d89;
+}
+
+.stats-compare-selection {
+  margin-top: 6px;
+  font-size: 0.8rem;
+  color: #35557f;
 }
 
 .stats-chip {
@@ -3849,7 +3872,7 @@
   margin-top: 22px;
   display: grid;
   gap: 12px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
 }
 
 .country-compare-insight {
@@ -3907,6 +3930,56 @@
   font-size: 0.84rem;
   line-height: 1.4;
   color: var(--text-muted);
+}
+
+.country-compare-ai {
+  margin-top: 16px;
+  border-radius: 20px;
+  border: 1px solid rgba(173, 201, 229, 0.36);
+  padding: 16px 18px;
+  background:
+    radial-gradient(120% 120% at 0% 0%, rgba(79,116,230,0.1), transparent 52%),
+    radial-gradient(120% 120% at 100% 0%, rgba(34,211,238,0.1), transparent 52%),
+    rgba(255,255,255,0.82);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.7),
+    0 16px 40px rgba(15,23,42,0.08);
+}
+
+.country-compare-ai-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.country-compare-ai-kicker {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: #42638d;
+}
+
+.country-compare-ai-title {
+  margin-top: 4px;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-strong);
+}
+
+.country-compare-ai-generated {
+  font-size: 0.76rem;
+  color: #587799;
+}
+
+.country-compare-ai-body {
+  margin-top: 12px;
+  display: grid;
+  gap: 8px;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  color: #2f4c72;
 }
 
 .country-duel-board {
@@ -4208,6 +4281,7 @@
   .country-duel-center { text-align: left; }
   .country-duel-side.align-right { justify-content: flex-start; }
   .country-compare-grid { grid-template-columns: 1fr; }
+  .country-compare-ai-head { flex-direction: column; }
 }
 
 @media (max-width: 640px) {
@@ -4242,6 +4316,10 @@
 
   .country-compare-insights {
     grid-template-columns: 1fr;
+  }
+
+  .country-compare-ai-head {
+    flex-direction: column;
   }
 
   .country-duel-head {

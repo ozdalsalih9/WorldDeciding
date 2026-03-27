@@ -45,6 +45,9 @@
       Api__BaseUrl: ${API_BASE_URL:-https://worlddeciding.com}
       Cors__AllowedOrigins__0: ${CORS_ALLOWED_ORIGIN_0:-https://worlddeciding.com}
       Cors__AllowedOrigins__1: ${CORS_ALLOWED_ORIGIN_1:-https://www.worlddeciding.com}
+      Gemini__ApiKey: ${GEMINI_API_KEY:?Set GEMINI_API_KEY in .env}
+      Gemini__Model: ${GEMINI_MODEL:-gemini-2.5-flash}
+      Gemini__ApiVersion: ${GEMINI_API_VERSION:-v1beta}
       RefreshCookie__Secure: true
       RefreshCookie__SameSite: None
     ports:

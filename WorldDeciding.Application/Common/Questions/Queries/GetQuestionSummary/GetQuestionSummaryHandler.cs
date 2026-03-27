@@ -1,5 +1,6 @@
-﻿using MediatR;
+using MediatR;
 using Microsoft.EntityFrameworkCore;
+using WorldDeciding.Application.Common.Exceptions;
 using WorldDeciding.Application.Common.Interfaces;
 using WorldDeciding.Application.Common.Questions.Dtos;
 using WorldDeciding.Application.Questions.Dtos;
@@ -29,7 +30,6 @@ public sealed class GetQuestionSummaryHandler
         GetQuestionSummaryQuery request,
         CancellationToken ct)
     {
-        // 🔹 Son 50 + Top 30 (like) = max 100 yorum
         var latest = _db.Comments
             .AsNoTracking()
             .Where(c => c.QuestionId == request.QuestionId)
@@ -65,7 +65,6 @@ public sealed class GetQuestionSummaryHandler
             );
         }
 
-        // 🔹 Cache kontrolü (ÖNCE)
         var existing = await _db.QuestionCommentSummaries
             .FirstOrDefaultAsync(x => x.QuestionId == request.QuestionId, ct);
 
@@ -80,7 +79,6 @@ public sealed class GetQuestionSummaryHandler
             );
         }
 
-        // 🔴 Spam protection (same user + same question)
         var userId = _currentUser.UserId;
 
         if (userId is not null)
@@ -96,9 +94,12 @@ public sealed class GetQuestionSummaryHandler
             );
 
             if (count > 1)
-                throw new InvalidOperationException(
-                    "Please wait before requesting another summary."
+            {
+                throw new TooManyRequestsException(
+                    "Please wait before requesting another summary.",
+                    retryAfterSeconds: 30
                 );
+            }
         }
 
         var questionTitle = await _db.Questions

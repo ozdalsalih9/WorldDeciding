@@ -11,7 +11,7 @@ namespace WorldDeciding.Infrastructure.Ai;
 public sealed class GptSummarizer : IAiSummarizer
 {
     private readonly HttpClient _http;
-    private readonly string _apiKey;
+    private readonly string? _apiKey;
     private readonly string _model;
     private readonly string _apiVersion;
     private readonly ILogger<GptSummarizer> _logger;
@@ -25,8 +25,7 @@ public sealed class GptSummarizer : IAiSummarizer
     {
         _http = http;
         _logger = logger;
-        _apiKey = cfg["Gemini:ApiKey"]
-            ?? throw new InvalidOperationException("Gemini ApiKey not configured.");
+        _apiKey = cfg["Gemini:ApiKey"];
         _model = cfg["Gemini:Model"] ?? "gemini-2.5-flash";
         _apiVersion = cfg["Gemini:ApiVersion"] ?? "v1beta";
 
@@ -49,9 +48,7 @@ public sealed class GptSummarizer : IAiSummarizer
         if (cleanedComments.Count == 0)
             return BuildNoCommentsSummary(cleanedTitle);
 
-        try
-        {
-            var prompt = $"""
+        var prompt = $"""
 Question:
 "{cleanedTitle}"
 
@@ -59,12 +56,74 @@ Recent comments:
 - {string.Join("\n- ", cleanedComments)}
 """;
 
+        var generated = await GenerateTextAsync(
+            "Summarize the discussion in 3 to 5 short bullet points. Keep the tone neutral, casual, and readable. Reflect disagreement where it exists. Do not invent facts, do not add promotion, and do not use academic phrasing.",
+            prompt,
+            maxOutputTokens: 256,
+            ct);
+
+        return string.IsNullOrWhiteSpace(generated)
+            ? BuildFallbackSummary(cleanedTitle, cleanedComments.Count)
+            : generated;
+    }
+
+    public async Task<string> SummarizeCountryComparisonAsync(
+        string questionTitle,
+        CountryComparisonSummaryInput input,
+        CancellationToken ct)
+    {
+        var fallback = BuildCountryComparisonFallback(questionTitle, input);
+        if (input.Options.Count == 0)
+            return fallback;
+
+        var lines = input.Options
+            .Select(option =>
+                $"- {SanitizeText(option.OptionLabel, 180)} | {input.LeftCountryCode}: {Math.Round(option.LeftPercentage, 1)}% ({option.LeftCount}) | {input.RightCountryCode}: {Math.Round(option.RightPercentage, 1)}% ({option.RightCount}) | GLOBAL: {Math.Round(option.GlobalPercentage, 1)}% ({option.GlobalCount})")
+            .ToList();
+
+        var prompt = $"""
+Question:
+"{SanitizeText(questionTitle, 200)}"
+
+Compare these country vote patterns:
+- {input.LeftCountryCode}: {input.LeftTotal} votes
+- {input.RightCountryCode}: {input.RightTotal} votes
+- GLOBAL: {input.GlobalTotal} votes
+
+Option split:
+{string.Join("\n", lines)}
+""";
+
+        var generated = await GenerateTextAsync(
+            "Write 2 or 3 short sentences about why these countries may be answering differently. Mention the biggest contrast, note where they align with the global baseline, and use tentative language such as 'could reflect' or 'might be related to'. If the sample is small, say that clearly. Do not claim certainty.",
+            prompt,
+            maxOutputTokens: 220,
+            ct);
+
+        return string.IsNullOrWhiteSpace(generated)
+            ? fallback
+            : generated;
+    }
+
+    private async Task<string?> GenerateTextAsync(
+        string systemInstruction,
+        string prompt,
+        int maxOutputTokens,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(_apiKey))
+        {
+            _logger.LogWarning("Gemini ApiKey not configured. Returning fallback text.");
+            return null;
+        }
+
+        try
+        {
             var body = new GeminiGenerateContentRequest(
                 SystemInstruction: new GeminiContent(
                     Parts:
                     [
-                        new GeminiPart(
-                            "Summarize the discussion in 3 to 5 short bullet points. Keep the tone neutral, casual, and readable. Reflect disagreement where it exists. Do not invent facts, do not add promotion, and do not use academic phrasing.")
+                        new GeminiPart(systemInstruction)
                     ]),
                 Contents:
                 [
@@ -78,7 +137,7 @@ Recent comments:
                 GenerationConfig: new GeminiGenerationConfig(
                     Temperature: 0.4m,
                     TopP: 0.9m,
-                    MaxOutputTokens: 256));
+                    MaxOutputTokens: maxOutputTokens));
 
             var requestJson = JsonSerializer.Serialize(body, JsonOptions);
             var requestPath = $"{_apiVersion}/models/{_model}:generateContent";
@@ -96,7 +155,7 @@ Recent comments:
             if (res.StatusCode == HttpStatusCode.TooManyRequests)
             {
                 _logger.LogWarning("Gemini HTTP 429 response body: {ResponseBody}", raw);
-                return BuildFallbackSummary(cleanedTitle, cleanedComments.Count);
+                return null;
             }
 
             if (!res.IsSuccessStatusCode)
@@ -110,7 +169,7 @@ Recent comments:
                     _logger.LogWarning("Gemini HTTP {StatusCode} response body: {ResponseBody}", res.StatusCode, raw);
                 }
 
-                return BuildFallbackSummary(cleanedTitle, cleanedComments.Count);
+                return null;
             }
 
             using var doc = JsonDocument.Parse(raw);
@@ -120,7 +179,7 @@ Recent comments:
                 promptFeedback.TryGetProperty("blockReason", out var blockReason))
             {
                 _logger.LogWarning("Gemini prompt blocked: {Reason}", blockReason);
-                return BuildFallbackSummary(cleanedTitle, cleanedComments.Count);
+                return null;
             }
 
             if (!root.TryGetProperty("candidates", out var candidates) ||
@@ -128,7 +187,7 @@ Recent comments:
                 candidates.GetArrayLength() == 0)
             {
                 _logger.LogWarning("Gemini response has no candidates");
-                return BuildFallbackSummary(cleanedTitle, cleanedComments.Count);
+                return null;
             }
 
             var candidate = candidates[0];
@@ -149,7 +208,7 @@ Recent comments:
                 parts.GetArrayLength() == 0)
             {
                 _logger.LogWarning("Gemini response has no content parts");
-                return BuildFallbackSummary(cleanedTitle, cleanedComments.Count);
+                return null;
             }
 
             var texts = new List<string>();
@@ -166,7 +225,7 @@ Recent comments:
             if (texts.Count == 0)
             {
                 _logger.LogWarning("Gemini parts exist but no text field found");
-                return BuildFallbackSummary(cleanedTitle, cleanedComments.Count);
+                return null;
             }
 
             return string.Join("\n", texts);
@@ -174,7 +233,7 @@ Recent comments:
         catch (Exception ex)
         {
             _logger.LogError(ex, "Gemini summarization exception");
-            return BuildFallbackSummary(cleanedTitle, cleanedComments.Count);
+            return null;
         }
     }
 
@@ -198,6 +257,33 @@ Recent comments:
             1 => $"There is 1 recent comment on {discussionLabel}. AI summary is temporarily unavailable, so showing the raw discussion is recommended.",
             _ => $"There are {commentCount} recent comments on {discussionLabel}. AI summary is temporarily unavailable right now, but the discussion is active."
         };
+    }
+
+    private static string BuildCountryComparisonFallback(
+        string questionTitle,
+        CountryComparisonSummaryInput input)
+    {
+        if (input.LeftTotal == 0 && input.RightTotal == 0)
+            return $"There is no country-level vote data yet for \"{questionTitle}\".";
+
+        var strongestGap = input.Options
+            .OrderByDescending(option => Math.Abs(option.LeftPercentage - option.RightPercentage))
+            .FirstOrDefault();
+
+        if (strongestGap is null)
+            return $"{input.LeftCountryCode} and {input.RightCountryCode} already have vote activity on this question, but there is not enough option-level detail yet to explain the pattern.";
+
+        var leadingCountry = strongestGap.LeftPercentage >= strongestGap.RightPercentage
+            ? input.LeftCountryCode
+            : input.RightCountryCode;
+        var gap = Math.Round(Math.Abs(strongestGap.LeftPercentage - strongestGap.RightPercentage), 1);
+        var overlapScore = Math.Round(input.Options.Sum(option => Math.Min(option.LeftPercentage, option.RightPercentage)));
+        var sampleSize = input.LeftTotal + input.RightTotal;
+        var sampleNote = sampleSize < 20
+            ? $" The sample is still very small ({sampleSize} votes across the pair), so this should be read as an early signal."
+            : string.Empty;
+
+        return $"{leadingCountry} leans more toward \"{strongestGap.OptionLabel}\" in this comparison, with a {gap}-point gap between the two countries. The two distributions still overlap by about {overlapScore} points overall, which means part of the preference pattern is shared even if one option stands out more strongly.{sampleNote}";
     }
 
     private static string SanitizeText(string? value, int maxLength)
