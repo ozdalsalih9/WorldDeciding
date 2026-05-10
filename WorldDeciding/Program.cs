@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using Serilog;
@@ -83,6 +84,7 @@ builder.Services
 
 // --- HttpContext ---
 builder.Services.AddHttpContextAccessor();
+builder.Services.AddMemoryCache();
 
 // --- Identity (TEK SEFER) ---
 builder.Services.AddIdentityCore<AppUser>(opt =>
@@ -269,6 +271,64 @@ app.Use(async (context, next) =>
 
 // Proxy header'ları auth öncesi okumalı
 app.UseForwardedHeaders();
+
+app.Use(async (context, next) =>
+{
+    var path = context.Request.Path;
+    var isApiRequest = path.StartsWithSegments("/api");
+    var isAccessProbe =
+        path.StartsWithSegments("/api/auth/access-status") ||
+        path.StartsWithSegments("/api/auth/register-country");
+
+    if (!isApiRequest || isAccessProbe)
+    {
+        await next();
+        return;
+    }
+
+    var config = context.RequestServices.GetRequiredService<IConfiguration>();
+    if (!config.GetValue<bool>("VpnDetection:Enabled"))
+    {
+        await next();
+        return;
+    }
+
+    var client = context.RequestServices.GetRequiredService<IClientContext>();
+    var clientIp = client.ClientIp;
+    if (clientIp is null)
+    {
+        await next();
+        return;
+    }
+
+    var cache = context.RequestServices.GetRequiredService<Microsoft.Extensions.Caching.Memory.IMemoryCache>();
+    var cacheKey = $"vpn-access:{clientIp}";
+
+    if (!cache.TryGetValue<VpnDetectionResult>(cacheKey, out var decision) || decision is null)
+    {
+        var vpnDetection = context.RequestServices.GetRequiredService<IVpnDetectionService>();
+        var userAgent = context.Request.Headers["User-Agent"].FirstOrDefault();
+        var acceptLanguage = context.Request.Headers["Accept-Language"].FirstOrDefault();
+        decision = await vpnDetection.CheckAsync(clientIp, userAgent, acceptLanguage, context.RequestAborted);
+        cache.Set(cacheKey, decision, decision.ShouldBlock ? TimeSpan.FromMinutes(5) : TimeSpan.FromMinutes(15));
+    }
+
+    if (!decision.ShouldBlock)
+    {
+        await next();
+        return;
+    }
+
+    context.Response.StatusCode = StatusCodes.Status403Forbidden;
+    await context.Response.WriteAsJsonAsync(new
+    {
+        message = "VPN, proxy, Tor, and hosting network access is not allowed on WorldDeciding. Disable it and try again.",
+        vpnBlocked = true,
+        riskReason = decision.RiskReason,
+        provider = decision.Provider,
+        countryCode = decision.CountryCode
+    });
+});
 
 // 429 middleware (Controllers'tan önce)
 app.UseMiddleware<RateLimitExceptionMiddleware>();

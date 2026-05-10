@@ -15,6 +15,8 @@ const AUTH_REFRESH_EXCLUDED_PATHS = new Set([
   '/api/auth/forgot-password',
   '/api/auth/reset-password',
   '/api/auth/resend-confirmation',
+  '/api/auth/access-status',
+  '/api/auth/register-country',
 ])
 
 export function setAccessToken(token: string | null) {

@@ -192,6 +192,18 @@ export default function Register() {
     !isResolvingCountry &&
     !canRegisterByCountryCheck
 
+  const detectedCountryLabel = detectedCountryCode
+    ? `${detectedCountryName ? `${detectedCountryName} ` : ''}(${detectedCountryCode})`
+    : null
+
+  const connectionStatusText = isResolvingCountry
+    ? 'Checking your estimated country...'
+    : isVpnBlocked
+      ? 'VPN or proxy connection detected'
+      : detectedCountryLabel
+        ? `Estimated country: ${detectedCountryLabel}`
+        : 'Estimated country unavailable'
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
@@ -277,6 +289,15 @@ export default function Register() {
           <p className="auth-subtitle">
             Choose your country carefully during registration. It cannot be changed later from your profile.
           </p>
+
+          <div className={`auth-connection-card ${isVpnBlocked ? 'is-blocked' : ''}`}>
+            <div>
+              <p className="auth-connection-label">Connection status</p>
+              <strong>{connectionStatusText}</strong>
+            </div>
+            <span>{isVpnBlocked ? 'Blocked' : isResolvingCountry ? 'Checking' : 'Allowed'}</span>
+          </div>
+
           {isVpnBlocked ? (
             <div className="auth-error mb-5">
               {error ?? countryVerificationUnavailableMessage}
@@ -337,7 +358,6 @@ export default function Register() {
               <label className="label">Country</label>
               <select
                 required
-                size={10}
                 className="input auth-input auth-country-list"
                 value={countryCode}
                 onChange={e => {
@@ -351,15 +371,7 @@ export default function Register() {
                   <option key={opt.code} value={opt.code}>{opt.label}</option>
                 ))}
               </select>
-              <p className="mt-2 text-xs text-muted">Selected country code: <strong>{countryCode}</strong></p>
-              {isResolvingCountry ? (
-                <p className="mt-1 text-xs text-muted">Detecting your country...</p>
-              ) : detectedCountryCode ? (
-                <p className="mt-1 text-xs text-muted">
-                  Detected country:{' '}
-                  <strong>{detectedCountryName ? `${detectedCountryName} (${detectedCountryCode})` : detectedCountryCode}</strong>
-                </p>
-              ) : null}
+              <p className="auth-country-hint">Selected country code: <strong>{countryCode || '-'}</strong></p>
               {suggestedCountryCode ? (
                 <p className="mt-1 text-xs font-semibold text-[var(--accent-strong)]">
                   Suggested country: {suggestedCountryCode}

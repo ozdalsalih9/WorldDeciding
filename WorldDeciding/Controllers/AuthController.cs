@@ -113,6 +113,18 @@ public class AuthController : ControllerBase
         string? RiskReason
     );
 
+    public record SiteAccessRes(
+        bool Allowed,
+        string? CountryCode,
+        string? CountryName,
+        double Confidence,
+        string GeoProvider,
+        bool VpnBlocked,
+        string? RiskReason,
+        string VpnProvider,
+        string? Message
+    );
+
     // ==== Endpoints ====
 
     [HttpGet("register-country")]
@@ -123,7 +135,7 @@ public class AuthController : ControllerBase
         var enforcement = IsRegisterCountryMatchEnforced();
         var resolved = await ResolveCurrentCountryAsync(ct);
         var blockOnVerificationFailure = ShouldBlockOnCountryVerificationFailure();
-        var vpnDecision = await CheckRegistrationVpnAsync(ct);
+        var vpnDecision = await CheckClientVpnAsync(ct);
         var countryName = GetCountryName(resolved.countryCode);
 
         if (vpnDecision.ShouldBlock)
@@ -174,6 +186,49 @@ public class AuthController : ControllerBase
         ));
     }
 
+    [HttpGet("access-status")]
+    [AllowAnonymous]
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
+    public async Task<ActionResult<SiteAccessRes>> GetAccessStatus(CancellationToken ct)
+    {
+        var resolved = await ResolveCurrentCountryAsync(ct);
+        var vpnDecision = await CheckClientVpnAsync(ct);
+        var vpnCountryCode = NormalizeCountryCode(vpnDecision.CountryCode);
+        var estimatedCountryCode = vpnCountryCode ?? resolved.countryCode;
+        var estimatedCountryName = GetCountryName(estimatedCountryCode);
+
+        if (vpnDecision.ShouldBlock)
+        {
+            return Ok(new SiteAccessRes(
+                false,
+                estimatedCountryCode,
+                estimatedCountryName,
+                resolved.confidence,
+                resolved.provider,
+                true,
+                vpnDecision.RiskReason,
+                vpnDecision.Provider,
+                BuildSiteVpnBlockedMessage(vpnDecision, estimatedCountryCode, estimatedCountryName)
+            ));
+        }
+
+        var estimatedCountryLabel = estimatedCountryName is not null && estimatedCountryCode is not null
+            ? $"{estimatedCountryName} ({estimatedCountryCode})"
+            : estimatedCountryCode;
+
+        return Ok(new SiteAccessRes(
+            true,
+            estimatedCountryCode,
+            estimatedCountryName,
+            resolved.confidence,
+            resolved.provider,
+            false,
+            vpnDecision.RiskReason,
+            vpnDecision.Provider,
+            estimatedCountryLabel is null ? null : $"Estimated country: {estimatedCountryLabel}"
+        ));
+    }
+
     [HttpPost("register")]
     [AllowAnonymous]
     public async Task<IActionResult> Register(
@@ -219,7 +274,7 @@ public class AuthController : ControllerBase
             });
         }
 
-        var vpnDecision = await CheckRegistrationVpnAsync(HttpContext.RequestAborted);
+        var vpnDecision = await CheckClientVpnAsync(HttpContext.RequestAborted);
         if (vpnDecision.ShouldBlock)
         {
             return StatusCode(StatusCodes.Status403Forbidden, new
@@ -600,7 +655,7 @@ public class AuthController : ControllerBase
 
     // ==== Helpers ====
 
-    private async Task<VpnDetectionResult> CheckRegistrationVpnAsync(CancellationToken ct)
+    private async Task<VpnDetectionResult> CheckClientVpnAsync(CancellationToken ct)
     {
         var clientIp = _client.ClientIp;
         var userAgent = Request.Headers["User-Agent"].FirstOrDefault();
@@ -618,6 +673,28 @@ public class AuthController : ControllerBase
         }
 
         return decision;
+    }
+
+    private static string BuildSiteVpnBlockedMessage(
+        VpnDetectionResult decision,
+        string? countryCode,
+        string? countryName)
+    {
+        if (!decision.IsAvailable && decision.ShouldBlock)
+        {
+            return "Connection security verification is temporarily unavailable. Please try again later.";
+        }
+
+        var estimatedCountry = countryName is not null && countryCode is not null
+            ? $"{countryName} ({countryCode})"
+            : countryCode;
+
+        if (estimatedCountry is null)
+        {
+            return "VPN, proxy, Tor, and hosting network access is not allowed on WorldDeciding. Disable it and try again.";
+        }
+
+        return $"VPN, proxy, Tor, and hosting network access is not allowed on WorldDeciding. Estimated country: {estimatedCountry}. Disable it and try again.";
     }
 
     private static string BuildVpnBlockedMessage(VpnDetectionResult decision)

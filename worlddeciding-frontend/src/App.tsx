@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect } from 'react'
+import { Suspense, lazy, useEffect, useState } from 'react'
 import { Routes, Route, Navigate, useLocation, Link } from 'react-router-dom'
 import Login from './pages/Login'
 import Register from './pages/Register'
@@ -27,12 +27,27 @@ import Privacy from './pages/Privacy'
 import Cookies from './pages/Cookies'
 import { useCookieConsent } from '@/app/consent'
 import { trackGoogleAnalyticsPageView } from '@/app/analytics'
+import api, { authNoRefreshConfig } from '@/shared/api/client'
 
 const QuestionStatsPage = lazy(() => import('./pages/QuestionStats'))
+
+type SiteAccessStatus = {
+  allowed?: boolean
+  countryCode?: string | null
+  countryName?: string | null
+  confidence?: number
+  geoProvider?: string
+  vpnBlocked?: boolean
+  riskReason?: string | null
+  vpnProvider?: string
+  message?: string | null
+}
 
 export default function App() {
   const location = useLocation()
   const { consent } = useCookieConsent()
+  const [siteAccess, setSiteAccess] = useState<SiteAccessStatus | null>(null)
+  const [siteAccessError, setSiteAccessError] = useState(false)
   const isAuthPage =
     location.pathname === '/login' ||
     location.pathname === '/register' ||
@@ -57,6 +72,87 @@ export default function App() {
     const pagePath = `${location.pathname}${location.search}${location.hash}`
     trackGoogleAnalyticsPageView(pagePath)
   }, [consent.analytics, location.hash, location.pathname, location.search])
+
+  useEffect(() => {
+    let ignore = false
+
+    const checkAccess = async () => {
+      try {
+        const res = await api.get<SiteAccessStatus>('/api/auth/access-status', authNoRefreshConfig)
+        if (!ignore) {
+          setSiteAccess(res.data ?? { allowed: true })
+          setSiteAccessError(false)
+        }
+      } catch {
+        if (!ignore) {
+          setSiteAccess({ allowed: true })
+          setSiteAccessError(true)
+        }
+      }
+    }
+
+    void checkAccess()
+
+    return () => {
+      ignore = true
+    }
+  }, [])
+
+  const isAccessBlocked = siteAccess?.allowed === false || siteAccess?.vpnBlocked === true
+  const estimatedCountry =
+    siteAccess?.countryName && siteAccess?.countryCode
+      ? `${siteAccess.countryName} (${siteAccess.countryCode})`
+      : siteAccess?.countryCode ?? 'Unknown'
+
+  if (siteAccess === null && !siteAccessError) {
+    return (
+      <div className="app-shell">
+        <div className="app-backdrop">
+          <span className="app-aurora one" />
+          <span className="app-aurora two" />
+          <span className="app-aurora three" />
+          <span className="app-grid" />
+        </div>
+        <main className="access-status-shell">
+          <section className="access-status-card">
+            <p className="section-heading">Connection check</p>
+            <h1>Checking access</h1>
+            <p>Verifying connection security before loading WorldDeciding.</p>
+          </section>
+        </main>
+      </div>
+    )
+  }
+
+  if (isAccessBlocked) {
+    return (
+      <div className="app-shell">
+        <div className="app-backdrop">
+          <span className="app-aurora one" />
+          <span className="app-aurora two" />
+          <span className="app-aurora three" />
+          <span className="app-grid" />
+        </div>
+        <main className="access-status-shell">
+          <section className="access-status-card access-status-card-blocked">
+            <p className="section-heading">Access blocked</p>
+            <h1>VPN usage is not allowed</h1>
+            <p>{siteAccess?.message ?? 'VPN, proxy, Tor, and hosting network access is not allowed on WorldDeciding.'}</p>
+            <div className="access-status-meta">
+              <span>Estimated country</span>
+              <strong>{estimatedCountry}</strong>
+            </div>
+            {siteAccess?.riskReason ? (
+              <div className="access-status-meta">
+                <span>Risk signal</span>
+                <strong>{siteAccess.riskReason}</strong>
+              </div>
+            ) : null}
+          </section>
+        </main>
+      </div>
+    )
+  }
 
   return (
     <div className="app-shell">
