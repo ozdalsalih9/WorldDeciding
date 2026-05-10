@@ -200,6 +200,7 @@ builder.Services.AddScoped<IEmailSender, SmtpEmailSender>();
 
 // --- Security services ---
 builder.Services.AddScoped<IAccessTokenService, AccessTokenService>();
+builder.Services.AddHttpClient<IVpnDetectionService, IpQualityScoreVpnDetectionService>();
 
 builder.Services.Configure<RefreshTokenService.Options>(
     builder.Configuration.GetSection("RefreshToken"));

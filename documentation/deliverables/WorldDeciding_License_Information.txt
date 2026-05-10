@@ -1,0 +1,17 @@
+WorldDeciding License Information
+Generated: May 1, 2026
+
+Project license status:
+No repository-level open source license file was found at the time this deliverable was generated. Unless the project owner or institution provides a separate written license, the WorldDeciding source code, documentation, screenshots, and generated deliverables should be treated as all rights reserved.
+
+Academic use:
+These materials may be submitted, reviewed, and archived for the related academic thesis/project evaluation according to the applicable university rules. Redistribution, commercial use, sublicensing, or reuse in another project requires permission from the project owner.
+
+Third-party software:
+WorldDeciding uses third-party frameworks and libraries, including but not limited to .NET, ASP.NET Core, Entity Framework Core, MediatR, PostgreSQL, Redis, React, Vite, TypeScript, Tailwind CSS, Axios, React Query, Docker, pdfkit, and docx. Each dependency remains governed by its own license terms. Review the package metadata and official project repositories before redistribution or production release.
+
+Screenshots and assets:
+Screenshots generated from the WorldDeciding application are part of the project documentation. Do not reuse them outside the academic/project context without permission.
+
+Future recommendation:
+Before publishing the repository publicly, add an explicit LICENSE file at the repository root and verify compatibility of all third-party dependency licenses.

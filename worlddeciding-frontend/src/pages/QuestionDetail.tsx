@@ -9,7 +9,7 @@ import useAuth from '@/features/auth'
 import useToast from '@/shared/ui/toast/useToast'
 import { voteOnQuestion } from '@/features/vote/api/vote'
 import { fetchCategoryQuestions } from '@/entities/category/api/categories'
-import { fetchQuestionSummary } from '@/entities/question/api/questions'
+import { fetchQuestionSummary, fetchQuestionsPage } from '@/entities/question/api/questions'
 
 type CommentDto = {
   id: string
@@ -370,6 +370,13 @@ export default function QuestionDetail() {
     enabled: !!categoryId,
   })
 
+  const fallbackQuestions = useQuery({
+    queryKey: ['questions', 'next-fallback', id],
+    queryFn: () => fetchQuestionsPage({ page: 1, take: 100 }),
+    enabled: !!id && !categoryId,
+    staleTime: 30_000,
+  })
+
   const questionId = id ?? ''
 
   const rootComments = useInfiniteQuery<PagedResult<CommentDto>, Error>({
@@ -532,15 +539,23 @@ export default function QuestionDetail() {
   }, [stats.data])
 
   const nextQuestionId = useMemo(() => {
-    if (!categoryQuestions.data?.length || !id) return null
-    if (categoryQuestions.data.length < 2) return null
-    const currentIndex = categoryQuestions.data.findIndex(item => item.id === id)
+    if (!id) return null
+
+    const scopedQuestions = categoryQuestions.data?.length
+      ? categoryQuestions.data
+      : fallbackQuestions.data?.items ?? []
+
+    if (scopedQuestions.length < 2) return null
+
+    const currentIndex = scopedQuestions.findIndex(item => item.id === id)
     if (currentIndex === -1) {
-      return categoryQuestions.data.find(item => item.id !== id)?.id ?? null
+      return scopedQuestions.find(item => item.id !== id)?.id ?? null
     }
-    const next = categoryQuestions.data[(currentIndex + 1) % categoryQuestions.data.length]
+    const next = scopedQuestions[(currentIndex + 1) % scopedQuestions.length]
     return next.id === id ? null : next.id
-  }, [categoryQuestions.data, id])
+  }, [categoryQuestions.data, fallbackQuestions.data?.items, id])
+
+  const isFindingNextQuestion = categoryQuestions.isLoading || fallbackQuestions.isLoading
 
   const clearPostVoteTimers = () => {
     if (postVotePromptDelayTimer.current) clearTimeout(postVotePromptDelayTimer.current)
@@ -1209,6 +1224,20 @@ export default function QuestionDetail() {
             </button>
           </>
         )}
+
+        <button
+          type="button"
+          onClick={handleSkipToNext}
+          disabled={!nextQuestionId || isFindingNextQuestion}
+          className="next-question-fab"
+        >
+          <span className="next-question-fab-kicker">
+            {isFindingNextQuestion ? 'Finding next' : nextQuestionId ? 'Continue' : 'End of list'}
+          </span>
+          <span className="next-question-fab-label">
+            {isFindingNextQuestion ? 'Loading...' : nextQuestionId ? 'Next question' : 'No next question'}
+          </span>
+        </button>
 
         {typeof document !== 'undefined'
           ? createPortal(

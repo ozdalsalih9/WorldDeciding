@@ -242,18 +242,19 @@ export default function Home() {
 
   return (
     <div className="container-page home-shell space-y-8 pt-6 pb-2 lg:space-y-10 lg:pt-8">
-      <section className="home-wow-hero">
+      <section className="home-wow-hero home-wow-hero-refined">
         <div className="home-wow-grid">
           <div className="home-wow-copy">
             <span className="pill">WorldDeciding Live</span>
             <h1 className="heading-1 max-w-2xl text-4xl leading-tight sm:text-5xl">
-              Vote, compare, and follow what the world is deciding now.
+              Vote on the questions moving right now.
             </h1>
             <p className="max-w-2xl text-base text-muted">
-              Follow live questions, track real-time vote splits, and jump into the fastest-moving debates.
+              Follow live splits, compare momentum, and move from one decision to the next without losing context.
             </p>
             <div className="flex flex-wrap gap-3">
               <Link to="/questions" className="btn-primary">Explore Questions</Link>
+              <Link to="/binary" className="btn-ghost">Start Either / Or</Link>
             </div>
 
             <div className="home-wow-link-row">

@@ -7,6 +7,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
+using System.Globalization;
 using System.Net;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
@@ -37,6 +38,7 @@ public class AuthController : ControllerBase
     private readonly IRefreshTokenService _refreshTokens;
     private readonly IClientContext _client;
     private readonly IGeoIpResolver _geo;
+    private readonly IVpnDetectionService _vpnDetection;
     private readonly IIpHasher _ipHasher;
     private readonly IAbuseDetector _abuse;
     private readonly IHostEnvironment _environment;
@@ -51,6 +53,7 @@ public class AuthController : ControllerBase
         IRefreshTokenService refreshTokens,
         IClientContext client,
         IGeoIpResolver geo,
+        IVpnDetectionService vpnDetection,
         IIpHasher ipHasher,
         IAbuseDetector abuse,
         IHostEnvironment environment,
@@ -64,6 +67,7 @@ public class AuthController : ControllerBase
         _refreshTokens = refreshTokens;
         _client = client;
         _geo = geo;
+        _vpnDetection = vpnDetection;
         _ipHasher = ipHasher;
         _abuse = abuse;
         _environment = environment;
@@ -98,11 +102,15 @@ public class AuthController : ControllerBase
     public record ResendConfirmationReq(string Email);
     public record RegisterCountryRes(
         string? CountryCode,
+        string? CountryName,
+        string? SuggestedCountryCode,
         bool EnforceCountryMatch,
         bool CanRegister,
         double Confidence,
         string Provider,
-        string? Message
+        string? Message,
+        bool VpnBlocked,
+        string? RiskReason
     );
 
     // ==== Endpoints ====
@@ -115,10 +123,30 @@ public class AuthController : ControllerBase
         var enforcement = IsRegisterCountryMatchEnforced();
         var resolved = await ResolveCurrentCountryAsync(ct);
         var blockOnVerificationFailure = ShouldBlockOnCountryVerificationFailure();
+        var vpnDecision = await CheckRegistrationVpnAsync(ct);
+        var countryName = GetCountryName(resolved.countryCode);
+
+        if (vpnDecision.ShouldBlock)
+        {
+            return Ok(new RegisterCountryRes(
+                resolved.countryCode,
+                countryName,
+                resolved.countryCode,
+                enforcement,
+                false,
+                resolved.confidence,
+                vpnDecision.Provider,
+                BuildVpnBlockedMessage(vpnDecision),
+                true,
+                vpnDecision.RiskReason
+            ));
+        }
 
         if (enforcement && !resolved.isUsable)
         {
             return Ok(new RegisterCountryRes(
+                null,
+                null,
                 null,
                 true,
                 !blockOnVerificationFailure,
@@ -126,17 +154,23 @@ public class AuthController : ControllerBase
                 resolved.provider,
                 blockOnVerificationFailure
                     ? CountryVerificationUnavailableMessage
-                    : CountryVerificationUnavailableSoftMessage
+                    : CountryVerificationUnavailableSoftMessage,
+                false,
+                null
             ));
         }
 
         return Ok(new RegisterCountryRes(
             resolved.countryCode,
+            countryName,
+            resolved.countryCode,
             enforcement,
             true,
             resolved.confidence,
             resolved.provider,
-            resolved.countryCode is null ? null : $"Detected country: {resolved.countryCode}"
+            resolved.countryCode is null ? null : $"Detected country: {resolved.countryCode}",
+            false,
+            vpnDecision.RiskReason
         ));
     }
 
@@ -147,40 +181,78 @@ public class AuthController : ControllerBase
         [FromServices] IEmailSender emailSender,
         [FromServices] IConfiguration cfg)
     {
-        if (string.IsNullOrWhiteSpace(req.Email))
-            return BadRequest(new { message = "Email is required." });
+        var fieldErrors = new Dictionary<string, string[]>();
+        var email = req.Email?.Trim();
 
-        if (string.IsNullOrWhiteSpace(req.Password) || req.Password.Length < 6)
-            return BadRequest(new { message = "Password must be at least 6 characters." });
+        if (string.IsNullOrWhiteSpace(email))
+        {
+            fieldErrors["email"] = new[] { "Email is required." };
+        }
+
+        var passwordErrors = GetPasswordRequirementErrors(req.Password);
+        if (passwordErrors.Length > 0)
+        {
+            fieldErrors["password"] = passwordErrors;
+        }
 
         if (req.BirthDate is DateOnly dob)
         {
             var today = DateOnly.FromDateTime(DateTime.UtcNow);
             var age = today.Year - dob.Year - (today < dob.AddYears(today.Year - dob.Year) ? 1 : 0);
             if (age < 13)
-                return BadRequest(new { message = "Users must be 13+." });
+                fieldErrors["birthDate"] = new[] { "Users must be 13+." };
         }
 
         if (req.Gender is short g && (g < 0 || g > 4))
-            return BadRequest(new { message = "Invalid gender value." });
+            fieldErrors["gender"] = new[] { "Invalid gender value." };
 
         var requestedCountryCode = NormalizeCountryCode(req.CountryCode);
         if (requestedCountryCode is null)
-            return BadRequest(new { message = "Country must be a valid ISO-3166-1 alpha-2 code." });
+            fieldErrors["countryCode"] = new[] { "Country must be a valid ISO-3166-1 alpha-2 code." };
 
-        var countryMismatch = await ValidateRegistrationCountryAsync(requestedCountryCode, HttpContext.RequestAborted);
+        if (fieldErrors.Count > 0)
+        {
+            return BadRequest(new
+            {
+                message = "Please fix the highlighted fields.",
+                fieldErrors
+            });
+        }
+
+        var vpnDecision = await CheckRegistrationVpnAsync(HttpContext.RequestAborted);
+        if (vpnDecision.ShouldBlock)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new
+            {
+                message = BuildVpnBlockedMessage(vpnDecision),
+                vpnBlocked = true,
+                riskReason = vpnDecision.RiskReason,
+                provider = vpnDecision.Provider
+            });
+        }
+
+        var countryMismatch = await ValidateRegistrationCountryAsync(requestedCountryCode!, HttpContext.RequestAborted);
         if (countryMismatch is not null)
             return Conflict(countryMismatch);
 
-        var exists = await _users.FindByEmailAsync(req.Email);
+        var exists = await _users.FindByEmailAsync(email!);
         if (exists is not null)
-            return BadRequest(new { message = "Email is already in use." });
+        {
+            return BadRequest(new
+            {
+                message = "Email is already in use.",
+                fieldErrors = new Dictionary<string, string[]>
+                {
+                    ["email"] = new[] { "Email is already in use." }
+                }
+            });
+        }
 
         var user = new AppUser
         {
             Id = Guid.NewGuid(),
-            UserName = req.Email,
-            Email = req.Email,
+            UserName = email,
+            Email = email,
             CountryCode = requestedCountryCode,
             BirthDate = req.BirthDate,
             Gender = (req.Gender is short gv) ? (Gender)gv : Gender.Unknown,
@@ -189,7 +261,14 @@ public class AuthController : ControllerBase
 
         var result = await _users.CreateAsync(user, req.Password);
         if (!result.Succeeded)
-            return BadRequest(new { errors = result.Errors });
+        {
+            return BadRequest(new
+            {
+                message = "Registration failed. Please fix the highlighted fields.",
+                fieldErrors = MapIdentityErrors(result.Errors),
+                errors = result.Errors.Select(e => new { e.Code, e.Description })
+            });
+        }
 
         var token = await _users.GenerateEmailConfirmationTokenAsync(user);
         var encodedToken = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(token));
@@ -520,6 +599,100 @@ public class AuthController : ControllerBase
     }
 
     // ==== Helpers ====
+
+    private async Task<VpnDetectionResult> CheckRegistrationVpnAsync(CancellationToken ct)
+    {
+        var clientIp = _client.ClientIp;
+        var userAgent = Request.Headers["User-Agent"].FirstOrDefault();
+        var acceptLanguage = Request.Headers["Accept-Language"].FirstOrDefault();
+        var decision = await _vpnDetection.CheckAsync(clientIp, userAgent, acceptLanguage, ct);
+
+        if (decision.ShouldBlock)
+        {
+            _logger.LogInformation(
+                "Registration blocked by VPN detection. Provider={Provider} Reason={Reason} FraudScore={FraudScore} ClientIp={ClientIp}",
+                decision.Provider,
+                decision.RiskReason,
+                decision.FraudScore,
+                clientIp);
+        }
+
+        return decision;
+    }
+
+    private static string BuildVpnBlockedMessage(VpnDetectionResult decision)
+    {
+        if (!decision.IsAvailable && decision.ShouldBlock)
+        {
+            return "Registration security verification is temporarily unavailable. Please try again later.";
+        }
+
+        return "Registration is not available while using a VPN, proxy, Tor, or hosting network. Please disable it and try again.";
+    }
+
+    private static string[] GetPasswordRequirementErrors(string? password)
+    {
+        var errors = new List<string>();
+        if (string.IsNullOrWhiteSpace(password))
+        {
+            return new[] { "Password is required." };
+        }
+
+        if (password.Length < 10)
+            errors.Add("Password must be at least 10 characters.");
+        if (!password.Any(char.IsDigit))
+            errors.Add("Password must contain at least 1 digit.");
+        if (!password.Any(char.IsUpper))
+            errors.Add("Password must contain at least 1 uppercase letter.");
+        if (!password.Any(char.IsLower))
+            errors.Add("Password must contain at least 1 lowercase letter.");
+        if (!password.Any(ch => !char.IsLetterOrDigit(ch)))
+            errors.Add("Password must contain at least 1 symbol.");
+
+        return errors.ToArray();
+    }
+
+    private static Dictionary<string, string[]> MapIdentityErrors(IEnumerable<IdentityError> errors)
+    {
+        var mapped = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var error in errors)
+        {
+            var field = error.Code.StartsWith("Password", StringComparison.OrdinalIgnoreCase)
+                ? "password"
+                : error.Code.Contains("Email", StringComparison.OrdinalIgnoreCase)
+                    ? "email"
+                    : "form";
+
+            if (!mapped.TryGetValue(field, out var list))
+            {
+                list = new List<string>();
+                mapped[field] = list;
+            }
+
+            list.Add(error.Description);
+        }
+
+        return mapped.ToDictionary(pair => pair.Key, pair => pair.Value.ToArray(), StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static string? GetCountryName(string? countryCode)
+    {
+        var normalized = NormalizeCountryCode(countryCode);
+        if (normalized is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            return new RegionInfo(normalized).EnglishName;
+        }
+        catch
+        {
+            return normalized;
+        }
+    }
 
     private static string GetFrontendBaseUrl(IConfiguration cfg)
     {

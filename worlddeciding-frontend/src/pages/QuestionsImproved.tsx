@@ -8,6 +8,16 @@ const PAGE_SIZE = 12
 const SEARCH_FETCH_TAKE = 100
 const SEARCH_FETCH_MAX_PAGES = 200
 
+const getQuestionTypeLabel = (type?: number | string) => {
+  if (typeof type === 'number') {
+    return type === 0 ? 'Either / Or' : `Type ${type}`
+  }
+
+  if (!type) return 'Question'
+  if (type === '0') return 'Either / Or'
+  return type
+}
+
 async function fetchQuestionsByClientSearch(search: string, page: number, take: number): Promise<QuestionListPage> {
   const normalizedSearch = search.trim().toLocaleLowerCase()
   const allItems: QuestionListItem[] = []
@@ -107,55 +117,58 @@ export default function Questions() {
   if (questions.isError) return <div className="card"><div className="card-body text-center text-rose-500">Could not load questions.</div></div>
 
   return (
-    <div className="space-y-8">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="space-y-1">
+    <div className="questions-flow space-y-8">
+      <div className="questions-flow-hero">
+        <div className="space-y-2">
           <span className="section-heading">Questions</span>
           <h1 className="heading-1">Latest questions</h1>
-          <p className="text-sm text-muted">Search, paginate, and open details without loading the entire dataset.</p>
+          <p className="max-w-2xl text-sm text-muted">Scan the newest decisions, filter by title, and open the live vote surface in one step.</p>
         </div>
-        <Link to="/categories" className="btn-primary">Browse categories</Link>
+        <div className="questions-flow-hero-actions">
+          <Link to="/binary" className="btn-ghost">Either / Or</Link>
+          <Link to="/categories" className="btn-primary">Browse categories</Link>
+        </div>
       </div>
 
-      <div className="card">
-        <div className="card-body flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex w-full max-w-lg gap-2">
+      <div className="questions-toolbar">
+        <div className="questions-toolbar-main">
+          <div className="questions-search-wrap">
             <input
-              className="input"
+              className="input questions-search"
               placeholder="Search questions..."
               value={searchInput}
               onChange={(event) => setSearchInput(event.target.value)}
             />
           </div>
-          <div className="text-xs text-muted">
-            Page {currentPage} / {totalPages} | Total {questions.data?.total ?? 0}
+          <div className="questions-toolbar-meta">
+            <span>Page {currentPage} / {totalPages}</span>
+            <span>{questions.data?.total ?? 0} total</span>
+            {search ? <span>Filtered</span> : <span>Newest first</span>}
           </div>
         </div>
       </div>
 
       {questions.isFetching && !questions.isLoading && (
-        <div className="card">
-          <div className="card-body py-3 text-xs font-semibold uppercase tracking-[0.16em] text-muted animate-pulse">
-            Loading next results...
-          </div>
+        <div className="questions-refresh-strip">
+          Loading next results...
         </div>
       )}
 
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="questions-grid">
         {questions.data?.items.map(q => (
           <Link
             key={q.id}
             to={`/questions/${q.id}`}
-            className="group relative overflow-hidden rounded-2xl border border-border bg-panel p-5 shadow-[0_18px_50px_rgba(15,23,42,0.12)] transition hover:-translate-y-1 hover:border-[rgba(34,211,238,0.3)]"
+            className="questions-list-card group"
           >
-            <div className="absolute inset-0 bg-[var(--accent-muted)] opacity-0 transition duration-300 group-hover:opacity-100" />
-            <div className="relative flex items-center justify-between gap-3">
-              <span className="rounded-full border border-border bg-panel px-3 py-1 text-[11px] uppercase tracking-[0.18em] text-muted">Question</span>
-              <span className="text-xs text-[var(--accent-strong)] transition group-hover:text-[var(--accent)]">Details -</span>
+            <span className="questions-list-card-glow" aria-hidden />
+            <div className="questions-list-card-top">
+              <span className="questions-type-pill">{getQuestionTypeLabel(q.type)}</span>
+              <span className="questions-open-link">Open</span>
             </div>
-            <div className="relative mt-3 text-lg font-semibold leading-snug text-strong">{q.title}</div>
-            <div className="relative mt-4 flex items-center gap-2 text-xs text-muted">
-              <span className="h-2 w-2 animate-pulse rounded-full bg-[var(--accent)]" />
+            <div className="questions-list-title">{q.title}</div>
+            <div className="questions-list-foot">
+              <span className="questions-live-dot" aria-hidden />
               <span>Live vote tracking</span>
             </div>
           </Link>
@@ -163,12 +176,15 @@ export default function Questions() {
       </div>
 
       {(questions.data?.items.length ?? 0) === 0 && (
-        <div className="card">
-          <div className="card-body text-center text-muted">No questions found for current filters.</div>
+        <div className="questions-empty">
+          <p>No questions found for current filters.</p>
+          <button type="button" className="btn-ghost" onClick={() => setSearchInput('')}>
+            Clear search
+          </button>
         </div>
       )}
 
-      <div className="flex items-center justify-end gap-2">
+      <div className="questions-pager">
         <button
           type="button"
           className="btn-ghost"

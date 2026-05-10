@@ -12,11 +12,11 @@ const genderOptions = [
 ]
 
 const passwordRules = [
-  'At least 10 characters',
-  'At least 1 digit',
-  'At least 1 uppercase letter',
-  'At least 1 lowercase letter',
-  'At least 1 symbol (e.g. !@#$%)',
+  { key: 'length', label: 'At least 10 characters', test: (value: string) => value.length >= 10 },
+  { key: 'digit', label: 'At least 1 digit', test: (value: string) => /\d/.test(value) },
+  { key: 'uppercase', label: 'At least 1 uppercase letter', test: (value: string) => /[A-Z]/.test(value) },
+  { key: 'lowercase', label: 'At least 1 lowercase letter', test: (value: string) => /[a-z]/.test(value) },
+  { key: 'symbol', label: 'At least 1 symbol (e.g. !@#$%)', test: (value: string) => /[^a-zA-Z0-9]/.test(value) },
 ]
 
 type CountryOption = {
@@ -26,12 +26,18 @@ type CountryOption = {
 
 type RegisterCountryResponse = {
   countryCode?: string | null
+  countryName?: string | null
+  suggestedCountryCode?: string | null
   enforceCountryMatch?: boolean
   canRegister?: boolean
   confidence?: number
   provider?: string
   message?: string | null
+  vpnBlocked?: boolean
+  riskReason?: string | null
 }
+
+type FieldErrors = Record<string, string[]>
 
 const countryVerificationUnavailableMessage =
   'We could not verify your country from your connection. Refresh the page and try again. If you are using a VPN or proxy, disable it first.'
@@ -85,12 +91,26 @@ export default function Register() {
   const [birthDate, setBirthDate] = useState('')
   const [gender, setGender] = useState(0)
   const [detectedCountryCode, setDetectedCountryCode] = useState<string | null>(null)
+  const [detectedCountryName, setDetectedCountryName] = useState<string | null>(null)
   const [isCountryMatchRequired, setIsCountryMatchRequired] = useState(false)
   const [canRegisterByCountryCheck, setCanRegisterByCountryCheck] = useState(false)
   const [isResolvingCountry, setIsResolvingCountry] = useState(true)
   const [suggestedCountryCode, setSuggestedCountryCode] = useState<string | null>(null)
+  const [isVpnBlocked, setIsVpnBlocked] = useState(false)
+  const [riskReason, setRiskReason] = useState<string | null>(null)
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
   const [error, setError] = useState<string | null>(null)
   const [isSubmitting, setSubmitting] = useState(false)
+
+  const passwordChecklist = useMemo(
+    () => passwordRules.map(rule => ({ ...rule, passed: rule.test(password) })),
+    [password]
+  )
+
+  const passwordMissingRules = useMemo(
+    () => passwordChecklist.filter(rule => !rule.passed).map(rule => rule.label),
+    [passwordChecklist]
+  )
 
   useEffect(() => {
     let ignore = false
@@ -104,24 +124,29 @@ export default function Register() {
 
         const responseData = (res.data ?? {}) as RegisterCountryResponse
         const detected = responseData.countryCode?.trim().toUpperCase() || null
+        const suggested = responseData.suggestedCountryCode?.trim().toUpperCase() || detected
         const enforce = Boolean(responseData.enforceCountryMatch)
         const canRegister = responseData.canRegister !== false
+        const vpnBlocked = Boolean(responseData.vpnBlocked)
         const responseMessage =
           typeof responseData.message === 'string' && responseData.message.trim()
             ? responseData.message.trim()
             : null
 
         setDetectedCountryCode(detected)
+        setDetectedCountryName(responseData.countryName?.trim() || null)
         setIsCountryMatchRequired(enforce)
         setCanRegisterByCountryCheck(canRegister)
+        setIsVpnBlocked(vpnBlocked)
+        setRiskReason(responseData.riskReason?.trim() || null)
 
-        if (detected) {
-          setCountryCode(detected)
-          setSuggestedCountryCode(detected)
+        if (suggested) {
+          setCountryCode(suggested)
+          setSuggestedCountryCode(suggested)
           setError(null)
         }
 
-        if (!detected) {
+        if (!suggested) {
           setSuggestedCountryCode(null)
         }
 
@@ -135,9 +160,12 @@ export default function Register() {
       } catch {
         if (!ignore) {
           setDetectedCountryCode(null)
+          setDetectedCountryName(null)
           setIsCountryMatchRequired(true)
           setCanRegisterByCountryCheck(true)
           setSuggestedCountryCode(null)
+          setIsVpnBlocked(false)
+          setRiskReason(null)
           setError(null)
         }
       } finally {
@@ -167,12 +195,30 @@ export default function Register() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
+    setFieldErrors({})
 
     if (hasCountryMismatch && detectedCountryCode) {
       const mismatchMessage = `Country must match your detected location: ${detectedCountryCode}.`
       setSuggestedCountryCode(detectedCountryCode)
       setError(mismatchMessage)
+      setFieldErrors({ countryCode: [mismatchMessage] })
       toast.error(mismatchMessage)
+      return
+    }
+
+    if (isVpnBlocked) {
+      const vpnMessage = error ?? countryVerificationUnavailableMessage
+      setError(vpnMessage)
+      toast.error(vpnMessage)
+      return
+    }
+
+    if (passwordMissingRules.length > 0) {
+      const nextFieldErrors = { password: passwordMissingRules }
+      setFieldErrors(nextFieldErrors)
+      const msg = 'Password does not meet the requirements.'
+      setError(msg)
+      toast.error(msg)
       return
     }
 
@@ -189,11 +235,21 @@ export default function Register() {
       nav('/login', { replace: true, state: { message: verifyMessage } })
     } catch (err: any) {
       const msg = err?.response?.data?.message ?? err?.message ?? 'Sign up failed'
-      const nextSuggestedCountryCode = err?.suggestedCountryCode
+      const responseData = err?.responseData
+      const nextSuggestedCountryCode =
+        err?.suggestedCountryCode ??
+        (typeof responseData?.suggestedCountryCode === 'string' ? responseData.suggestedCountryCode : null)
       if (typeof nextSuggestedCountryCode === 'string' && nextSuggestedCountryCode.length === 2) {
         setCountryCode(nextSuggestedCountryCode)
         setSuggestedCountryCode(nextSuggestedCountryCode)
         setDetectedCountryCode(nextSuggestedCountryCode)
+      }
+      if (err?.fieldErrors && typeof err.fieldErrors === 'object') {
+        setFieldErrors(err.fieldErrors)
+      }
+      if (responseData?.vpnBlocked === true) {
+        setIsVpnBlocked(true)
+        setRiskReason(typeof responseData.riskReason === 'string' ? responseData.riskReason : null)
       }
       setError(msg)
       toast.error(msg)
@@ -221,6 +277,12 @@ export default function Register() {
           <p className="auth-subtitle">
             Choose your country carefully during registration. It cannot be changed later from your profile.
           </p>
+          {isVpnBlocked ? (
+            <div className="auth-error mb-5">
+              {error ?? countryVerificationUnavailableMessage}
+              {riskReason ? <span className="mt-1 block text-xs opacity-80">Risk signal: {riskReason}</span> : null}
+            </div>
+          ) : null}
 
           <form className="auth-form-grid" onSubmit={handleSubmit}>
             <div className="auth-col-span-2">
@@ -230,8 +292,14 @@ export default function Register() {
                 type="email"
                 className="input auth-input"
                 value={email}
-                onChange={e => setEmail(e.target.value)}
+                onChange={e => {
+                  setEmail(e.target.value)
+                  setFieldErrors(prev => ({ ...prev, email: [] }))
+                }}
               />
+              {fieldErrors.email?.length ? (
+                <div className="auth-field-error">{fieldErrors.email.join(' ')}</div>
+              ) : null}
             </div>
 
             <div>
@@ -241,16 +309,28 @@ export default function Register() {
                 type="password"
                 className="input auth-input"
                 value={password}
-                onChange={e => setPassword(e.target.value)}
+                onChange={e => {
+                  setPassword(e.target.value)
+                  setFieldErrors(prev => ({ ...prev, password: [] }))
+                }}
               />
               <div className="auth-rules">
                 <p className="auth-rules-title">Password rules</p>
                 <ul className="auth-rules-list">
                   {passwordRules.map(rule => (
-                    <li key={rule}>- {rule}</li>
+                    <li
+                      key={rule.key}
+                      className={passwordChecklist.find(item => item.key === rule.key)?.passed ? 'is-passed' : ''}
+                    >
+                      <span aria-hidden>{passwordChecklist.find(item => item.key === rule.key)?.passed ? 'OK' : '-'}</span>
+                      {rule.label}
+                    </li>
                   ))}
                 </ul>
               </div>
+              {fieldErrors.password?.length ? (
+                <div className="auth-field-error">{fieldErrors.password.join(' ')}</div>
+              ) : null}
             </div>
 
             <div>
@@ -263,6 +343,7 @@ export default function Register() {
                 onChange={e => {
                   setCountryCode(e.target.value)
                   setError(null)
+                  setFieldErrors(prev => ({ ...prev, countryCode: [] }))
                 }}
               >
                 <option value="" disabled>Select your country</option>
@@ -274,7 +355,10 @@ export default function Register() {
               {isResolvingCountry ? (
                 <p className="mt-1 text-xs text-muted">Detecting your country...</p>
               ) : detectedCountryCode ? (
-                <p className="mt-1 text-xs text-muted">Detected country: <strong>{detectedCountryCode}</strong></p>
+                <p className="mt-1 text-xs text-muted">
+                  Detected country:{' '}
+                  <strong>{detectedCountryName ? `${detectedCountryName} (${detectedCountryCode})` : detectedCountryCode}</strong>
+                </p>
               ) : null}
               {suggestedCountryCode ? (
                 <p className="mt-1 text-xs font-semibold text-[var(--accent-strong)]">
@@ -291,6 +375,9 @@ export default function Register() {
                   Country verification is required before registration can continue.
                 </p>
               ) : null}
+              {fieldErrors.countryCode?.length ? (
+                <div className="auth-field-error">{fieldErrors.countryCode.join(' ')}</div>
+              ) : null}
               <p className="mt-1 text-xs text-muted">This country selection is permanent after account creation.</p>
             </div>
 
@@ -301,8 +388,14 @@ export default function Register() {
                 type="date"
                 className="input auth-input"
                 value={birthDate}
-                onChange={e => setBirthDate(e.target.value)}
+                onChange={e => {
+                  setBirthDate(e.target.value)
+                  setFieldErrors(prev => ({ ...prev, birthDate: [] }))
+                }}
               />
+              {fieldErrors.birthDate?.length ? (
+                <div className="auth-field-error">{fieldErrors.birthDate.join(' ')}</div>
+              ) : null}
             </div>
 
             <div>
@@ -310,15 +403,21 @@ export default function Register() {
               <select
                 className="input auth-input"
                 value={gender}
-                onChange={e => setGender(Number(e.target.value))}
+                onChange={e => {
+                  setGender(Number(e.target.value))
+                  setFieldErrors(prev => ({ ...prev, gender: [] }))
+                }}
               >
                 {genderOptions.map(opt => (
                   <option key={opt.value} value={opt.value}>{opt.label}</option>
                 ))}
               </select>
+              {fieldErrors.gender?.length ? (
+                <div className="auth-field-error">{fieldErrors.gender.join(' ')}</div>
+              ) : null}
             </div>
 
-            {error && (
+            {error && !isVpnBlocked && (
               <div className="auth-col-span-2 auth-error">
                 {error}
               </div>
@@ -327,7 +426,7 @@ export default function Register() {
             <div className="auth-col-span-2 auth-actions">
               <button
                 type="submit"
-                disabled={isSubmitting || isResolvingCountry || hasCountryMismatch || isCountryVerificationBlocked}
+                disabled={isSubmitting || isResolvingCountry || hasCountryMismatch || isCountryVerificationBlocked || isVpnBlocked}
                 className="btn-primary w-full sm:w-auto"
               >
                 {isSubmitting ? 'Signing up...' : 'Sign up'}

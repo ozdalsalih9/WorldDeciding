@@ -20,4 +20,9 @@
     <Using Include="Xunit" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\WorldDeciding.Application\WorldDeciding.Application.csproj" />
+    <ProjectReference Include="..\WorldDeciding.Infrastructure\WorldDeciding.Infrastructure.csproj" />
+  </ItemGroup>
+
 </Project>

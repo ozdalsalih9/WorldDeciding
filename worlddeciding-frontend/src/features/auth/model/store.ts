@@ -4,6 +4,7 @@ import api, { authNoRefreshConfig, setAccessToken } from '@/shared/api/client'
 type AuthClientError = Error & {
   responseData?: Record<string, unknown>
   suggestedCountryCode?: string
+  fieldErrors?: Record<string, string[]>
 }
 
 type AuthState = {
@@ -173,6 +174,9 @@ const useAuth = create<AuthState>((set, get) => ({
         authError.responseData = responseData
         if (typeof responseData.suggestedCountryCode === 'string') {
           authError.suggestedCountryCode = responseData.suggestedCountryCode.trim().toUpperCase()
+        }
+        if (responseData.fieldErrors && typeof responseData.fieldErrors === 'object') {
+          authError.fieldErrors = responseData.fieldErrors as Record<string, string[]>
         }
       }
       throw authError

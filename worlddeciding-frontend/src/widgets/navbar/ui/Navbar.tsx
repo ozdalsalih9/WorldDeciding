@@ -26,17 +26,17 @@ export default function Navbar() {
                 <img src={worldDecidingLogo} alt="WorldDeciding logo" className="global-brand-logo" />
               </span>
               <span className="global-brand-copy">
-                <span className="global-brand-text">Global Pulse Network</span>
-                <span className="global-brand-wordmark-text">WorldDeciding</span>
+                <span className="global-brand-text">WorldDeciding</span>
+                <span className="global-brand-wordmark-text">Global pulse network</span>
               </span>
             </Link>
 
             <div className="global-nav-links hidden md:flex">
               <NavLink to="/" className={({ isActive }) => `nav-link-slim ${isActive ? 'nav-link-slim-active' : ''}`}>Home</NavLink>
               <NavLink to="/questions" className={({ isActive }) => `nav-link-slim ${isActive ? 'nav-link-slim-active' : ''}`}>Questions</NavLink>
-              <NavLink to="/leaderboard" className={({ isActive }) => `nav-link-slim ${isActive ? 'nav-link-slim-active' : ''}`}>Leaderboard</NavLink>
-              <NavLink to="/categories" className={({ isActive }) => `nav-link-slim ${isActive ? 'nav-link-slim-active' : ''}`}>Categories</NavLink>
               <NavLink to="/binary" className={({ isActive }) => `nav-link-slim ${isActive ? 'nav-link-slim-active' : ''}`}>Either / Or</NavLink>
+              <NavLink to="/categories" className={({ isActive }) => `nav-link-slim ${isActive ? 'nav-link-slim-active' : ''}`}>Categories</NavLink>
+              <NavLink to="/leaderboard" className={({ isActive }) => `nav-link-slim ${isActive ? 'nav-link-slim-active' : ''}`}>Leaderboard</NavLink>
               {isAdmin ? (
                 <NavLink to="/admin" className={({ isActive }) => `nav-link-slim ${isActive ? 'nav-link-slim-active' : ''}`}>Admin</NavLink>
               ) : null}
