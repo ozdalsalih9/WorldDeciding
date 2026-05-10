@@ -46,9 +46,21 @@ public sealed class IpQualityScoreVpnDetectionService : IVpnDetectionService
             return FailureResult("ip_unavailable", "Client IP could not be determined.");
         }
 
+        var inspectedIp = ip;
         if (IsPrivateOrLoopback(ip))
         {
-            return new VpnDetectionResult(true, false, ProviderName, null);
+            if (!GetBoolConfig("VpnDetection:ResolvePublicIpForPrivateClients", false))
+            {
+                return new VpnDetectionResult(true, false, ProviderName, null);
+            }
+
+            var publicIp = await ResolvePublicIpAsync(ct);
+            if (publicIp is null)
+            {
+                return FailureResult("public_ip_unavailable", "Public client IP could not be determined.");
+            }
+
+            inspectedIp = publicIp;
         }
 
         var apiKey = _config["VpnDetection:ApiKey"]?.Trim();
@@ -65,7 +77,8 @@ public sealed class IpQualityScoreVpnDetectionService : IVpnDetectionService
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
             timeout.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
 
-            var url = BuildRequestUrl(apiKey, ip, userAgent, acceptLanguage);
+            var strictness = Math.Clamp(GetIntConfig("VpnDetection:Strictness", 2), 0, 3);
+            var url = BuildRequestUrl(apiKey, inspectedIp, userAgent, acceptLanguage, strictness);
             using var response = await _http.GetAsync(url, timeout.Token);
 
             if (!response.IsSuccessStatusCode)
@@ -73,7 +86,7 @@ public sealed class IpQualityScoreVpnDetectionService : IVpnDetectionService
                 _logger.LogWarning(
                     "IPQualityScore VPN lookup failed with status {StatusCode} for IP {Ip}.",
                     (int)response.StatusCode,
-                    ip);
+                    inspectedIp);
                 return FailureResult("provider_http_error", "VPN detection provider returned an error.");
             }
 
@@ -90,12 +103,12 @@ public sealed class IpQualityScoreVpnDetectionService : IVpnDetectionService
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
-            _logger.LogWarning("IPQualityScore VPN lookup timed out for IP {Ip}.", ip);
+            _logger.LogWarning("IPQualityScore VPN lookup timed out for IP {Ip}.", inspectedIp);
             return FailureResult("provider_timeout", "VPN detection provider timed out.");
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "IPQualityScore VPN lookup failed for IP {Ip}.", ip);
+            _logger.LogWarning(ex, "IPQualityScore VPN lookup failed for IP {Ip}.", inspectedIp);
             return FailureResult("provider_error", "VPN detection provider failed.");
         }
     }
@@ -178,11 +191,12 @@ public sealed class IpQualityScoreVpnDetectionService : IVpnDetectionService
         string apiKey,
         IPAddress ip,
         string? userAgent,
-        string? acceptLanguage)
+        string? acceptLanguage,
+        int strictness)
     {
         var query = new List<string>
         {
-            "strictness=1",
+            $"strictness={strictness}",
             "allow_public_access_points=true",
             "lighter_penalties=false"
         };
@@ -199,6 +213,33 @@ public sealed class IpQualityScoreVpnDetectionService : IVpnDetectionService
 
         return
             $"https://www.ipqualityscore.com/api/json/ip/{Uri.EscapeDataString(apiKey)}/{Uri.EscapeDataString(ip.ToString())}?{string.Join("&", query)}";
+    }
+
+    private async Task<IPAddress?> ResolvePublicIpAsync(CancellationToken ct)
+    {
+        var endpoint = _config["VpnDetection:PublicIpEndpoint"]?.Trim();
+        if (string.IsNullOrWhiteSpace(endpoint))
+        {
+            endpoint = "https://api.ipify.org";
+        }
+
+        var timeoutSeconds = Math.Clamp(GetIntConfig("VpnDetection:TimeoutSeconds", 3), 1, 15);
+
+        try
+        {
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            timeout.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
+
+            var raw = await _http.GetStringAsync(endpoint, timeout.Token);
+            return IPAddress.TryParse(raw.Trim(), out var publicIp) && !IsPrivateOrLoopback(publicIp)
+                ? publicIp
+                : null;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+        {
+            _logger.LogWarning(ex, "Could not resolve public IP for VPN detection.");
+            return null;
+        }
     }
 
     private static bool? GetBool(JsonElement root, string name)

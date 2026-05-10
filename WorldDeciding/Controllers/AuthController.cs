@@ -9,6 +9,7 @@ using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using System.Globalization;
 using System.Net;
+using System.Net.Sockets;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
@@ -42,6 +43,7 @@ public class AuthController : ControllerBase
     private readonly IIpHasher _ipHasher;
     private readonly IAbuseDetector _abuse;
     private readonly IHostEnvironment _environment;
+    private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<AuthController> _logger;
     private readonly RefreshCookieOptions _refreshCookieOptions;
 
@@ -57,6 +59,7 @@ public class AuthController : ControllerBase
         IIpHasher ipHasher,
         IAbuseDetector abuse,
         IHostEnvironment environment,
+        IHttpClientFactory httpClientFactory,
         ILogger<AuthController> logger,
         IOptions<RefreshCookieOptions> refreshCookieOptions)
     {
@@ -71,6 +74,7 @@ public class AuthController : ControllerBase
         _ipHasher = ipHasher;
         _abuse = abuse;
         _environment = environment;
+        _httpClientFactory = httpClientFactory;
         _logger = logger;
         _refreshCookieOptions = refreshCookieOptions.Value;
     }
@@ -136,14 +140,16 @@ public class AuthController : ControllerBase
         var resolved = await ResolveCurrentCountryAsync(ct);
         var blockOnVerificationFailure = ShouldBlockOnCountryVerificationFailure();
         var vpnDecision = await CheckClientVpnAsync(ct);
-        var countryName = GetCountryName(resolved.countryCode);
+        var vpnCountryCode = NormalizeCountryCode(vpnDecision.CountryCode);
+        var estimatedCountryCode = resolved.countryCode ?? vpnCountryCode;
+        var countryName = GetCountryName(estimatedCountryCode);
 
         if (vpnDecision.ShouldBlock)
         {
             return Ok(new RegisterCountryRes(
-                resolved.countryCode,
+                estimatedCountryCode,
                 countryName,
-                resolved.countryCode,
+                estimatedCountryCode,
                 enforcement,
                 false,
                 resolved.confidence,
@@ -173,14 +179,14 @@ public class AuthController : ControllerBase
         }
 
         return Ok(new RegisterCountryRes(
-            resolved.countryCode,
+            estimatedCountryCode,
             countryName,
-            resolved.countryCode,
+            estimatedCountryCode,
             enforcement,
             true,
             resolved.confidence,
             resolved.provider,
-            resolved.countryCode is null ? null : $"Detected country: {resolved.countryCode}",
+            estimatedCountryCode is null ? null : $"Detected country: {estimatedCountryCode}",
             false,
             vpnDecision.RiskReason
         ));
@@ -1117,14 +1123,16 @@ public class AuthController : ControllerBase
             return (null, 0.0, "ClientIpUnavailable", false);
         }
 
-        var (countryIso2, confidence, provider) = await _geo.ResolveAsync(clientIp, ct);
+        var inspectedIp = await ResolveInspectableClientIpAsync(clientIp, ct) ?? clientIp;
+        var (countryIso2, confidence, provider) = await _geo.ResolveAsync(inspectedIp, ct);
         var countryCode = NormalizeCountryCode(countryIso2);
         var minimumConfidence = GetRegisterCountryMinimumConfidence();
         var isUsable = countryCode is not null && confidence >= minimumConfidence;
 
         _logger.LogDebug(
-            "Register country resolution result. ClientIp={ClientIp} RemoteIp={RemoteIp} CountryCode={CountryCode} Confidence={Confidence} Provider={Provider} IsUsable={IsUsable}",
+            "Register country resolution result. ClientIp={ClientIp} InspectedIp={InspectedIp} RemoteIp={RemoteIp} CountryCode={CountryCode} Confidence={Confidence} Provider={Provider} IsUsable={IsUsable}",
             clientIp,
+            inspectedIp,
             HttpContext.Connection.RemoteIpAddress,
             countryCode,
             confidence,
@@ -1148,6 +1156,40 @@ public class AuthController : ControllerBase
     private bool ShouldBlockOnCountryVerificationFailure()
     {
         return _cfg.GetValue<bool?>("GeoIp:BlockOnVerificationFailure") ?? false;
+    }
+
+    private async Task<IPAddress?> ResolveInspectableClientIpAsync(IPAddress clientIp, CancellationToken ct)
+    {
+        if (!IsPrivateOrLoopback(clientIp) || !_cfg.GetValue<bool>("GeoIp:ResolvePublicIpForPrivateClients"))
+        {
+            return clientIp;
+        }
+
+        var endpoint = _cfg["GeoIp:PublicIpEndpoint"]?.Trim();
+        if (string.IsNullOrWhiteSpace(endpoint))
+        {
+            endpoint = "https://api.ipify.org";
+        }
+
+        var timeoutSeconds = Math.Clamp(_cfg.GetValue<int?>("GeoIp:PublicIpTimeoutSeconds") ?? 3, 1, 15);
+
+        try
+        {
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            timeout.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
+
+            var http = _httpClientFactory.CreateClient();
+            var raw = await http.GetStringAsync(endpoint, timeout.Token);
+
+            return IPAddress.TryParse(raw.Trim(), out var publicIp) && !IsPrivateOrLoopback(publicIp)
+                ? publicIp
+                : null;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+        {
+            _logger.LogWarning(ex, "Could not resolve public IP for country detection.");
+            return null;
+        }
     }
 
     private string? GetTrustedProxyCountryHeader()

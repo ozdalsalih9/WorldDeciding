@@ -303,14 +303,19 @@ app.Use(async (context, next) =>
 
     var cache = context.RequestServices.GetRequiredService<Microsoft.Extensions.Caching.Memory.IMemoryCache>();
     var cacheKey = $"vpn-access:{clientIp}";
+    var canUseVpnCache = !IsPrivateOrLoopback(clientIp);
+    VpnDetectionResult? decision = null;
 
-    if (!cache.TryGetValue<VpnDetectionResult>(cacheKey, out var decision) || decision is null)
+    if (!canUseVpnCache || !cache.TryGetValue(cacheKey, out decision) || decision is null)
     {
         var vpnDetection = context.RequestServices.GetRequiredService<IVpnDetectionService>();
         var userAgent = context.Request.Headers["User-Agent"].FirstOrDefault();
         var acceptLanguage = context.Request.Headers["Accept-Language"].FirstOrDefault();
         decision = await vpnDetection.CheckAsync(clientIp, userAgent, acceptLanguage, context.RequestAborted);
-        cache.Set(cacheKey, decision, decision.ShouldBlock ? TimeSpan.FromMinutes(5) : TimeSpan.FromMinutes(15));
+        if (canUseVpnCache)
+        {
+            cache.Set(cacheKey, decision, decision.ShouldBlock ? TimeSpan.FromMinutes(5) : TimeSpan.FromMinutes(15));
+        }
     }
 
     if (!decision.ShouldBlock)
@@ -366,4 +371,28 @@ static string RequireConfig(string? value, string key, string environmentName)
     throw new InvalidOperationException(
         $"Missing configuration: {key}. Environment={environmentName}. " +
         "Set it in appsettings, environment variables, or user secrets.");
+}
+
+static bool IsPrivateOrLoopback(System.Net.IPAddress address)
+{
+    if (System.Net.IPAddress.IsLoopback(address))
+    {
+        return true;
+    }
+
+    if (address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6)
+    {
+        return address.IsIPv6LinkLocal || address.IsIPv6SiteLocal || address.IsIPv6UniqueLocal;
+    }
+
+    var bytes = address.GetAddressBytes();
+    return bytes[0] switch
+    {
+        10 => true,
+        127 => true,
+        169 when bytes[1] == 254 => true,
+        172 when bytes[1] >= 16 && bytes[1] <= 31 => true,
+        192 when bytes[1] == 168 => true,
+        _ => false
+    };
 }
