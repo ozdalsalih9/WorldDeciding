@@ -1,6 +1,7 @@
 ﻿using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using WorldDeciding.Application.Common.Interfaces;
 using WorldDeciding.Application.Common.Questions.Dtos;
 using WorldDeciding.Application.Common.Questions.Queries;
@@ -16,7 +17,13 @@ namespace WorldDeciding.Controllers;
 public class QuestionsController : ControllerBase
 {
     private readonly IMediator _mediator;
-    public QuestionsController(IMediator mediator) => _mediator = mediator;
+    private readonly IAppDbContext _db;
+
+    public QuestionsController(IMediator mediator, IAppDbContext db)
+    {
+        _mediator = mediator;
+        _db = db;
+    }
 
     [Authorize(Roles = "Admin")]
     [HttpPost]
@@ -35,6 +42,29 @@ public class QuestionsController : ControllerBase
     {
         var result = await _mediator.Send(new ListQuestionsQuery(categoryId, type, page, pageSize));
         return Ok(result);
+    }
+
+    [HttpGet("totals")]
+    public async Task<ActionResult<QuestionTotalsDto>> GetTotals(
+        [FromServices] IAppCache cache,
+        CancellationToken ct)
+    {
+        const string cacheKey = "questions:totals";
+
+        var cached = await cache.GetAsync<QuestionTotalsDto>(cacheKey);
+        if (cached is not null) return Ok(cached);
+
+        var totalQuestions = await _db.Questions
+            .AsNoTracking()
+            .CountAsync(x => x.Status == QuestionStatus.Published, ct);
+        var totalVotes = await _db.Votes
+            .AsNoTracking()
+            .CountAsync(ct);
+
+        var totals = new QuestionTotalsDto(totalQuestions, totalVotes);
+        await cache.SetAsync(cacheKey, totals, TimeSpan.FromSeconds(30));
+
+        return Ok(totals);
     }
 
     [HttpGet("{id:guid}")]
@@ -80,3 +110,5 @@ public class QuestionsController : ControllerBase
         return Ok(dto);
     }
 }
+
+public sealed record QuestionTotalsDto(int TotalQuestions, int TotalVotes);

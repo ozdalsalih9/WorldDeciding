@@ -406,6 +406,35 @@
   animation: question-grid-pan 38s linear infinite;
 }
 
+@media (max-width: 720px), (prefers-reduced-motion: reduce) {
+  .app-backdrop,
+  .app-grid,
+  .app-aurora,
+  .auth-grid,
+  .question-stage-grid,
+  .profile-shell-grid {
+    animation: none !important;
+  }
+
+  .app-aurora {
+    display: none;
+  }
+
+  .app-grid {
+    opacity: 0.045;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 .hero-blob {
   position: absolute;
   inset: 0;

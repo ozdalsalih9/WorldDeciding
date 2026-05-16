@@ -6,7 +6,15 @@ import { CookieConsentProvider } from '@/app/consent'
 import CookieBanner from '@/components/CookieBanner'
 import useAuth from '@/features/auth'
 
-const queryClient = new QueryClient()
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      refetchOnWindowFocus: false,
+      staleTime: 30_000,
+      gcTime: 5 * 60_000,
+    },
+  },
+})
 
 type Props = { children: React.ReactNode }
 

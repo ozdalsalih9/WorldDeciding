@@ -1,35 +1,39 @@
 import { Suspense, lazy, useEffect, useState } from 'react'
 import { Routes, Route, Navigate, useLocation, Link } from 'react-router-dom'
-import Login from './pages/Login'
-import Register from './pages/Register'
-import ResetPassword from './pages/ResetPassword'
-import VerifyEmail from './pages/VerifyEmail'
-import Questions from './pages/QuestionsImproved'
-import QuestionDetail from './pages/QuestionDetail'
 import Navbar from '@/widgets/navbar'
-import Home from './pages/Home'
-import CategoriesPage from './pages/Categories'
-import CategoryQuestionsPage from './pages/CategoryQuestions'
-import BinaryQuestions from './pages/BinaryQuestions'
-import Leaderboard from './pages/Leaderboard'
-import Profile from './pages/Profile'
-import PublicProfile from './pages/PublicProfile'
 import worldDecidingLogo from '@/shared/logo/worlddeciding.png'
 import RoleRoute from '@/components/RoleRoute'
-import AdminDashboard from './pages/AdminDashboard'
-import AdminQuestions from './pages/AdminQuestions'
-import AdminQuestionImport from './pages/AdminQuestionImport'
-import AdminQuestionDetail from './pages/AdminQuestionDetail'
-import AdminCategories from './pages/AdminCategories'
-import AdminAnalytics from './pages/AdminAnalytics'
-import Forbidden from './pages/Forbidden'
-import Privacy from './pages/Privacy'
-import Cookies from './pages/Cookies'
 import { useCookieConsent } from '@/app/consent'
 import { trackGoogleAnalyticsPageView } from '@/app/analytics'
 import api, { authNoRefreshConfig } from '@/shared/api/client'
 
+const Home = lazy(() => import('./pages/Home'))
+const Login = lazy(() => import('./pages/Login'))
+const Register = lazy(() => import('./pages/Register'))
+const ResetPassword = lazy(() => import('./pages/ResetPassword'))
+const VerifyEmail = lazy(() => import('./pages/VerifyEmail'))
+const Questions = lazy(() => import('./pages/QuestionsImproved'))
+const QuestionDetail = lazy(() => import('./pages/QuestionDetail'))
+const CategoriesPage = lazy(() => import('./pages/Categories'))
+const CategoryQuestionsPage = lazy(() => import('./pages/CategoryQuestions'))
+const BinaryQuestions = lazy(() => import('./pages/BinaryQuestions'))
+const Leaderboard = lazy(() => import('./pages/Leaderboard'))
+const Profile = lazy(() => import('./pages/Profile'))
+const PublicProfile = lazy(() => import('./pages/PublicProfile'))
+const AdminDashboard = lazy(() => import('./pages/AdminDashboard'))
+const AdminQuestions = lazy(() => import('./pages/AdminQuestions'))
+const AdminQuestionImport = lazy(() => import('./pages/AdminQuestionImport'))
+const AdminQuestionDetail = lazy(() => import('./pages/AdminQuestionDetail'))
+const AdminCategories = lazy(() => import('./pages/AdminCategories'))
+const AdminAnalytics = lazy(() => import('./pages/AdminAnalytics'))
+const Forbidden = lazy(() => import('./pages/Forbidden'))
+const Privacy = lazy(() => import('./pages/Privacy'))
+const Cookies = lazy(() => import('./pages/Cookies'))
 const QuestionStatsPage = lazy(() => import('./pages/QuestionStats'))
+
+function RouteFallback() {
+  return <div className="surface p-6 text-sm text-muted">Loading...</div>
+}
 
 type SiteAccessStatus = {
   allowed?: boolean
@@ -166,43 +170,38 @@ export default function App() {
       {!isAuthPage ? <Navbar /> : null}
 
       <main className={`app-main ${mainLayoutClass}${isAuthPage ? '' : ' container-page'}`}>
-        <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
-          <Route path="/reset-password" element={<ResetPassword />} />
-          <Route path="/verify-email" element={<VerifyEmail />} />
-          <Route path="/confirm-email" element={<VerifyEmail />} />
-          <Route path="/email-confirmed" element={<VerifyEmail />} />
-          <Route path="/categories" element={<CategoriesPage />} />
-          <Route path="/categories/:categoryId" element={<CategoryQuestionsPage />} />
-          <Route path="/binary" element={<BinaryQuestions />} />
-          <Route path="/leaderboard" element={<Leaderboard />} />
-          <Route path="/profile" element={<Profile />} />
-          <Route path="/profile/:userId" element={<PublicProfile />} />
-          <Route path="/questions" element={<Questions />} />
-          <Route path="/questions/:id" element={<QuestionDetail />} />
-          <Route path="/privacy" element={<Privacy />} />
-          <Route path="/cookies" element={<Cookies />} />
-          <Route path="/forbidden" element={<Forbidden />} />
-          <Route element={<RoleRoute roles={['Admin']} />}>
-            <Route path="/admin" element={<AdminDashboard />} />
-            <Route path="/admin/categories" element={<AdminCategories />} />
-            <Route path="/admin/analytics" element={<AdminAnalytics />} />
-            <Route path="/admin/questions" element={<AdminQuestions />} />
-            <Route path="/admin/questions/import" element={<AdminQuestionImport />} />
-            <Route path="/admin/questions/:id" element={<AdminQuestionDetail />} />
-          </Route>
-          <Route
-            path="/questions/:id/stats"
-            element={
-              <Suspense fallback={<div className="surface p-6 text-sm text-muted">Loading stats page...</div>}>
-                <QuestionStatsPage />
-              </Suspense>
-            }
-          />
-          <Route path="*" element={<Navigate to="/" />} />
-        </Routes>
+        <Suspense fallback={<RouteFallback />}>
+          <Routes>
+            <Route path="/" element={<Home />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
+            <Route path="/verify-email" element={<VerifyEmail />} />
+            <Route path="/confirm-email" element={<VerifyEmail />} />
+            <Route path="/email-confirmed" element={<VerifyEmail />} />
+            <Route path="/categories" element={<CategoriesPage />} />
+            <Route path="/categories/:categoryId" element={<CategoryQuestionsPage />} />
+            <Route path="/binary" element={<BinaryQuestions />} />
+            <Route path="/leaderboard" element={<Leaderboard />} />
+            <Route path="/profile" element={<Profile />} />
+            <Route path="/profile/:userId" element={<PublicProfile />} />
+            <Route path="/questions" element={<Questions />} />
+            <Route path="/questions/:id" element={<QuestionDetail />} />
+            <Route path="/privacy" element={<Privacy />} />
+            <Route path="/cookies" element={<Cookies />} />
+            <Route path="/forbidden" element={<Forbidden />} />
+            <Route element={<RoleRoute roles={['Admin']} />}>
+              <Route path="/admin" element={<AdminDashboard />} />
+              <Route path="/admin/categories" element={<AdminCategories />} />
+              <Route path="/admin/analytics" element={<AdminAnalytics />} />
+              <Route path="/admin/questions" element={<AdminQuestions />} />
+              <Route path="/admin/questions/import" element={<AdminQuestionImport />} />
+              <Route path="/admin/questions/:id" element={<AdminQuestionDetail />} />
+            </Route>
+            <Route path="/questions/:id/stats" element={<QuestionStatsPage />} />
+            <Route path="*" element={<Navigate to="/" />} />
+          </Routes>
+        </Suspense>
       </main>
 
       {!isAuthPage ? (

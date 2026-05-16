@@ -42,17 +42,10 @@ type LeaderboardResponse =
       data?: LeaderboardItem[]
     }
 
-type QuestionListResponse =
-  | Array<{ id?: string }>
-  | {
-      items?: Array<{ id?: string }>
-      data?: Array<{ id?: string }>
-      total?: number
-      page?: number
-      take?: number
-      pageSize?: number
-      hasMore?: boolean
-    }
+type QuestionTotalsResponse = {
+  totalQuestions: number
+  totalVotes: number
+}
 
 export default function Home() {
   const [now, setNow] = useState(() => Date.now())
@@ -86,63 +79,7 @@ export default function Home() {
 
   const allTimeTotals = useQuery({
     queryKey: ['home-all-time-totals'],
-    queryFn: async () => {
-      const take = 100
-      const maxPages = 200
-      const ids = new Set<string>()
-      let page = 1
-      let keepGoing = true
-
-      while (keepGoing && page <= maxPages) {
-        const response = await api.get<QuestionListResponse>('/api/questions', {
-          params: { page, take, pageSize: take },
-        })
-        const raw = response.data
-
-        const items = Array.isArray(raw) ? raw : raw.items ?? raw.data ?? []
-        const before = ids.size
-        for (const item of items) {
-          if (item?.id) ids.add(item.id)
-        }
-        const added = ids.size - before
-
-        if (Array.isArray(raw)) {
-          if (items.length < take || added === 0) break
-          page += 1
-          continue
-        }
-
-        const hasMore = typeof raw.hasMore === 'boolean'
-          ? raw.hasMore
-          : items.length === take
-        if (!hasMore || items.length === 0 || added === 0) break
-        page += 1
-      }
-
-      const questionIds = Array.from(ids)
-      let totalVotes = 0
-
-      for (let i = 0; i < questionIds.length; i += 10) {
-        const chunk = questionIds.slice(i, i + 10)
-        const statsChunk = await Promise.all(
-          chunk.map(async (questionId) => {
-            try {
-              const stats = (await api.get<QuestionStats>(`/api/questions/${questionId}/stats`)).data
-              if (typeof stats.totalVotes === 'number') return stats.totalVotes
-              return stats.options?.reduce((sum, option) => sum + (option.count ?? 0), 0) ?? 0
-            } catch {
-              return 0
-            }
-          })
-        )
-        totalVotes += statsChunk.reduce((sum, value) => sum + value, 0)
-      }
-
-      return {
-        totalQuestions: questionIds.length,
-        totalVotes,
-      }
-    },
+    queryFn: async () => (await api.get<QuestionTotalsResponse>('/api/questions/totals')).data,
     refetchInterval: 120_000,
     staleTime: 60_000,
     refetchOnWindowFocus: false,
