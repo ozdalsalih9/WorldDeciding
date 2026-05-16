@@ -2314,6 +2314,8 @@
   overflow: hidden;
   cursor: pointer;
   isolation: isolate;
+  contain: layout paint;
+  backface-visibility: hidden;
 }
 
 .auth-field-error {
@@ -2926,6 +2928,19 @@
 
 .two-split-actions .btn-primary {
   animation: binary-button-breathe 4.6s ease-in-out infinite;
+}
+
+.question-stage-shell.is-two-option .question-aurora,
+.question-stage-shell.is-two-option .question-grid-overlay,
+.question-stage-shell.is-two-option .two-split-orb,
+.question-stage-shell.is-two-option .two-split-grid,
+.question-stage-shell.is-two-option .two-split-panel-scan,
+.question-stage-shell.is-two-option .two-split-actions .btn-primary {
+  animation: none;
+}
+
+.question-stage-shell.is-two-option .question-ambient-backdrop {
+  display: none;
 }
 
 .two-split-live-row {

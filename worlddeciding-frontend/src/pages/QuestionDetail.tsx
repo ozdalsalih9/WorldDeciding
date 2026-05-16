@@ -43,8 +43,17 @@ type PagedResult<T> = {
 
 const COMMENT_TAKE = 20
 const COMMENT_MAX_LENGTH = 2000
+const PERCENTAGE_ANIMATION_DURATION_MS = 650
+const PERCENTAGE_ANIMATION_FRAME_MS = 80
 
 const SUMMARY_REFRESH_MESSAGE = 'Summary is refreshing, please wait a moment.'
+
+const arePercentagesEqual = (left: Record<string, number>, right: Record<string, number>) => {
+  const leftKeys = Object.keys(left)
+  const rightKeys = Object.keys(right)
+  if (leftKeys.length !== rightKeys.length) return false
+  return leftKeys.every(key => left[key] === right[key])
+}
 
 const formatCommentTimestamp = (value: string) => {
   const date = new Date(value)
@@ -592,23 +601,29 @@ export default function QuestionDetail() {
     }
 
     if (!questionOptions.length) {
-      animatedPercentagesRef.current = {}
-      setAnimatedPercentages({})
+      if (!arePercentagesEqual(animatedPercentagesRef.current, {})) {
+        animatedPercentagesRef.current = {}
+        setAnimatedPercentages({})
+      }
       percentageAnimationPending.current = false
       return
     }
 
     if (!percentageAnimationPending.current || stats.isLoading) {
-      animatedPercentagesRef.current = targets
-      setAnimatedPercentages(targets)
+      if (!arePercentagesEqual(animatedPercentagesRef.current, targets)) {
+        animatedPercentagesRef.current = targets
+        setAnimatedPercentages(targets)
+      }
       return
     }
 
     percentageAnimationPending.current = false
 
     if (typeof window === 'undefined') {
-      animatedPercentagesRef.current = targets
-      setAnimatedPercentages(targets)
+      if (!arePercentagesEqual(animatedPercentagesRef.current, targets)) {
+        animatedPercentagesRef.current = targets
+        setAnimatedPercentages(targets)
+      }
       return
     }
 
@@ -617,12 +632,12 @@ export default function QuestionDetail() {
       return acc
     }, {})
 
-    const durationMs = 850
     const startedAt = window.performance.now()
+    let lastPaintAt = startedAt - PERCENTAGE_ANIMATION_FRAME_MS
 
     const step = (now: number) => {
       const elapsed = now - startedAt
-      const progress = Math.min(1, elapsed / durationMs)
+      const progress = Math.min(1, elapsed / PERCENTAGE_ANIMATION_DURATION_MS)
       const eased = 1 - Math.pow(1 - progress, 3)
       const nextValues = questionOptions.reduce<Record<string, number>>((acc, option) => {
         const startValue = startValues[option.id] ?? 0
@@ -631,8 +646,14 @@ export default function QuestionDetail() {
         return acc
       }, {})
 
-      animatedPercentagesRef.current = nextValues
-      setAnimatedPercentages(nextValues)
+      if (now - lastPaintAt >= PERCENTAGE_ANIMATION_FRAME_MS || progress >= 1) {
+        lastPaintAt = now
+        const valuesToPaint = progress >= 1 ? targets : nextValues
+        if (!arePercentagesEqual(animatedPercentagesRef.current, valuesToPaint)) {
+          animatedPercentagesRef.current = valuesToPaint
+          setAnimatedPercentages(valuesToPaint)
+        }
+      }
 
       if (progress < 1) {
         percentageAnimationFrame.current = window.requestAnimationFrame(step)
@@ -908,8 +929,8 @@ export default function QuestionDetail() {
 
   return (
     <div className="question-full-bleed">
-      <div className="question-stage-shell relative min-h-screen overflow-hidden text-strong">
-        <div className="absolute inset-0 -z-10">
+      <div className={`question-stage-shell relative min-h-screen overflow-hidden text-strong ${isTwoOptionLayout ? 'is-two-option' : ''}`}>
+        <div className="question-ambient-backdrop absolute inset-0 -z-10">
           <div className="question-aurora question-aurora-one" />
           <div className="question-aurora question-aurora-two" />
           <div className="question-aurora question-aurora-three" />
