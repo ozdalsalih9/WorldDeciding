@@ -205,7 +205,7 @@ export default function App() {
       </main>
 
       {!isAuthPage ? (
-        <footer className="relative z-10 border-t border-[rgba(173,201,229,0.34)] bg-[rgba(244,249,255,0.82)] backdrop-blur-md">
+        <footer className="site-footer relative z-10">
           <div className="container-page py-6 sm:py-8">
             <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
               <div className="space-y-3">
@@ -213,7 +213,7 @@ export default function App() {
                   <img src={worldDecidingLogo} alt="WorldDeciding logo" className="h-11 w-11 rounded-full object-cover" />
                   <div className="space-y-0.5">
                     <p className="text-sm font-semibold text-strong">WorldDeciding</p>
-                    <p className="text-xs text-muted">Vote, compare, and follow what the world is deciding now.</p>
+                    <p className="text-xs text-muted">A calmer way to see what the world thinks.</p>
                   </div>
                 </div>
                 <p className="text-xs text-muted">(c) {new Date().getFullYear()} WorldDeciding. All rights reserved.</p>

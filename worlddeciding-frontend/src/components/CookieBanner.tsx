@@ -9,11 +9,11 @@ export default function CookieBanner() {
   }
 
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-4 z-[90] px-4">
-      <div className="container-page">
-        <section className="surface pointer-events-auto mx-auto max-w-4xl p-5 sm:p-6">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-            <div className="space-y-2">
+    <div className="cookie-banner pointer-events-none fixed inset-x-0 bottom-4 z-[90] px-4">
+      <div className="cookie-banner-inner container-page">
+        <section className="cookie-banner-card surface pointer-events-auto mx-auto max-w-4xl p-5 sm:p-6">
+          <div className="cookie-banner-layout flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div className="cookie-banner-copy space-y-2">
               <p className="text-xs font-semibold uppercase tracking-[0.24em] text-muted">Cookies</p>
               <h2 className="heading-2">We use essential cookies and optional analytics.</h2>
               <p className="max-w-2xl text-sm leading-7 text-muted">
@@ -31,7 +31,7 @@ export default function CookieBanner() {
               {error ? <p className="text-sm text-rose-500">{error}</p> : null}
             </div>
 
-            <div className="flex flex-col gap-2 sm:flex-row">
+            <div className="cookie-banner-actions flex flex-col gap-2 sm:flex-row">
               <button type="button" onClick={() => void declineAnalytics()} className="btn-ghost" disabled={isSaving}>
                 {isSaving ? 'Saving...' : 'Only necessary'}
               </button>

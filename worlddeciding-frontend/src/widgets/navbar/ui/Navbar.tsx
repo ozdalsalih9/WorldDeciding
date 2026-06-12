@@ -26,8 +26,11 @@ export default function Navbar() {
                 <img src={worldDecidingLogo} alt="WorldDeciding logo" className="global-brand-logo" />
               </span>
               <span className="global-brand-copy">
-                <span className="global-brand-text">WorldDeciding</span>
-                <span className="global-brand-wordmark-text">Global pulse network</span>
+                <span className="global-brand-wordmark-text">WorldDeciding</span>
+                <span className="global-brand-text">
+                  <span className="global-brand-status" aria-hidden />
+                  Global opinion, live
+                </span>
               </span>
             </Link>
 

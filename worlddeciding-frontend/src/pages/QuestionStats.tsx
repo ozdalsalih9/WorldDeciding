@@ -572,8 +572,8 @@ export default function QuestionStatsPage() {
   }
 
   return (
-    <div className="question-full-bleed">
-      <div className="relative min-h-screen overflow-hidden bg-[var(--bg-base)] text-strong">
+    <div className="question-full-bleed stats-page">
+      <div className="relative min-h-screen overflow-hidden text-strong">
         <div className="stats-hero">
           <span className="stats-orb one" />
           <span className="stats-orb two" />
@@ -581,15 +581,15 @@ export default function QuestionStatsPage() {
           <span className="stats-grid" />
         </div>
 
-        <div className="container-page relative z-10 py-12">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="container-page stats-page-container relative z-10 py-8 sm:py-12">
+          <div className="stats-page-header">
             <div className="space-y-2">
-              <p className="text-xs uppercase tracking-[0.38em] text-muted">Stats lab</p>
+              <p className="section-heading">Global vote map</p>
               <h1 className="text-3xl font-semibold leading-tight text-strong sm:text-4xl">
                 {question.data.title}
               </h1>
               <p className="max-w-2xl text-sm text-muted">
-                Watch real-time data in a 3D scene. Aurora grid, depth, vote bubbles, and country distribution come together.
+                Start with the world view, then move into the demographic and country-level detail behind the result.
               </p>
               <div className="flex flex-wrap items-center gap-3">
                 <span className="pill border-[rgba(34,211,238,0.3)] bg-[var(--accent-muted)] text-[var(--accent-strong)]">
@@ -599,7 +599,7 @@ export default function QuestionStatsPage() {
                 {typeof viewCount === 'number' ? <span className="pill">Views: {viewCount}</span> : null}
               </div>
             </div>
-            <div className="flex flex-wrap gap-3">
+            <div className="stats-page-actions">
               <Link
                 to={`/questions/${question.data.id}`}
                 className="btn-ghost"
@@ -616,17 +616,26 @@ export default function QuestionStatsPage() {
           </div>
 
           <div className="mt-10 space-y-8">
-            <div className="globe-hero">
-              <div className="globe-hero-inner">
-                {countryStats.length > 0 ? (
-                  <Suspense fallback={<div className="text-sm text-muted">Loading 3D globe...</div>}>
-                    <CountryGlobe data={countryStats} />
-                  </Suspense>
-                ) : (
-                  <div className="text-sm text-muted">No country votes yet to display on the globe.</div>
-                )}
+            <section className="stats-world-stage" aria-labelledby="world-stage-title">
+              <div className="stats-world-stage-head">
+                <div>
+                  <p className="stats-world-stage-kicker">Interactive world model</p>
+                  <h2 id="world-stage-title">Where the votes are coming from</h2>
+                </div>
+                <p>Drag to rotate. Scroll to zoom. The model pauses when it leaves the viewport.</p>
               </div>
-            </div>
+              <div className="globe-hero">
+                <div className="globe-hero-inner">
+                  {countryStats.length > 0 ? (
+                    <Suspense fallback={<div className="stats-world-loading">Loading world model...</div>}>
+                      <CountryGlobe data={countryStats} />
+                    </Suspense>
+                  ) : (
+                    <div className="stats-world-loading">No country votes yet to display on the globe.</div>
+                  )}
+                </div>
+              </div>
+            </section>
 
             <div className="grid gap-6 lg:grid-cols-[1.3fr_0.9fr]">
               <div className="stats-panel">
