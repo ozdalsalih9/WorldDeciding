@@ -63,31 +63,42 @@ export default function BinaryQuestions() {
 
   if (isLoading) {
     return (
-      <div className="card">
-        <div className="card-body text-center text-muted">Loading O mu bu mu...</div>
-      </div>
+      <section className="binary-launchpad" aria-live="polite">
+        <span className="binary-launchpad-grid" aria-hidden />
+        <div className="binary-launchpad-loader" aria-hidden>
+          <span />
+          <strong>VS</strong>
+          <span />
+        </div>
+        <p>Finding a live Either / Or matchup...</p>
+      </section>
     )
   }
 
   if (isError) {
     return (
-      <div className="card">
-        <div className="card-body text-center text-rose-500">Could not load O mu bu mu questions.</div>
-      </div>
+      <section className="binary-launchpad binary-launchpad-error">
+        <p>Could not load Either / Or questions.</p>
+      </section>
     )
   }
 
   if (!firstQuestionId) {
     return (
-      <div className="card">
-        <div className="card-body text-center text-muted">No binary questions available yet.</div>
-      </div>
+      <section className="binary-launchpad">
+        <p>No Either / Or questions are available yet.</p>
+      </section>
     )
   }
 
   return (
-    <div className="card">
-      <div className="card-body text-center text-muted">Starting O mu bu mu...</div>
-    </div>
+    <section className="binary-launchpad" aria-live="polite">
+      <div className="binary-launchpad-loader" aria-hidden>
+        <span />
+        <strong>VS</strong>
+        <span />
+      </div>
+      <p>Opening matchup...</p>
+    </section>
   )
 }

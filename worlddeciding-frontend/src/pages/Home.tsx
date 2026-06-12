@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import type { CSSProperties } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import api from '@/shared/api/client'
@@ -17,9 +18,9 @@ type LiveQuestionDto = {
 }
 
 const quickLinks = [
-  { title: 'Trending questions', href: '/questions', hint: 'Live list' },
-  { title: 'Browse categories', href: '/categories', hint: 'Explore' },
-  { title: 'Weekly leaderboard', href: '/leaderboard', hint: 'Momentum' },
+  { title: 'Question stream', href: '/questions', hint: 'Explore' },
+  { title: 'Either / Or', href: '/binary', hint: 'Fast vote' },
+  { title: 'Leaderboard', href: '/leaderboard', hint: 'Momentum' },
 ]
 
 type LeaderboardItem = {
@@ -90,7 +91,7 @@ export default function Home() {
     queryFn: async () =>
       (
         await api.get<LeaderboardResponse>('/api/leaderboard', {
-          params: { metric: 'votes', window: '7d', page: 1, take: 3 },
+          params: { metric: 'votes', window: '7d', page: 1, take: 4 },
         })
       ).data,
     refetchInterval: 45_000,
@@ -139,12 +140,12 @@ export default function Home() {
     return Math.round(((item.count ?? 0) / totalVotes) * 100)
   }
 
-  const topCategories = useMemo(() => (categories.data ?? []).slice(0, 8), [categories.data])
+  const topCategories = useMemo(() => (categories.data ?? []).slice(0, 7), [categories.data])
 
   const topLeaderboard = useMemo(() => {
     const raw = leaderboard.data
     const items = Array.isArray(raw) ? raw : raw?.items ?? raw?.data ?? []
-    return items.slice(0, 3)
+    return items.slice(0, 4)
   }, [leaderboard.data])
 
   const compactNumber = useMemo(
@@ -159,15 +160,15 @@ export default function Home() {
   const heroStats = useMemo(
     () => [
       {
-        label: 'Total Questions',
+        label: 'Questions',
         value: allTimeTotals.isLoading ? '--' : compactNumber.format(allTimeTotals.data?.totalQuestions ?? 0),
       },
       {
-        label: 'Total Votes Used',
+        label: 'Votes',
         value: allTimeTotals.isLoading ? '--' : compactNumber.format(allTimeTotals.data?.totalVotes ?? 0),
       },
       {
-        label: 'Active Categories',
+        label: 'Categories',
         value: categories.isLoading ? '--' : compactNumber.format(categories.data?.length ?? 0),
       },
     ],
@@ -177,235 +178,163 @@ export default function Home() {
   const getLeaderboardValue = (item: LeaderboardItem) =>
     item.votes ?? item.totalVotes ?? item.metricValue ?? item.value ?? item.score ?? 0
 
+  const liveOptions = liveQuestion.data?.options ?? []
+
   return (
-    <div className="container-page home-shell space-y-8 pt-6 pb-2 lg:space-y-10 lg:pt-8">
-      <section className="home-wow-hero home-wow-hero-refined">
-        <div className="home-wow-grid">
-          <div className="home-wow-copy">
-            <span className="pill">WorldDeciding Live</span>
-            <h1 className="heading-1 max-w-2xl text-4xl leading-tight sm:text-5xl">
-              Vote on the questions moving right now.
-            </h1>
-            <p className="max-w-2xl text-base text-muted">
-              Follow live splits, compare momentum, and move from one decision to the next without losing context.
-            </p>
-            <div className="flex flex-wrap gap-3">
-              <Link to="/questions" className="btn-primary">Explore Questions</Link>
-              <Link to="/binary" className="btn-ghost">Start Either / Or</Link>
-            </div>
+    <div className="home-cosmos container-page">
+      <section className="home-cosmos-hero" aria-label="WorldDeciding live dashboard">
+        <span className="home-cosmos-grid" aria-hidden />
+        <span className="home-cosmos-glow one" aria-hidden />
+        <span className="home-cosmos-glow two" aria-hidden />
+        <span className="home-cosmos-glow three" aria-hidden />
 
-            <div className="home-wow-link-row">
-              {quickLinks.map(link => (
-                <Link key={`${link.href}-${link.title}`} to={link.href} className="home-wow-link">
-                  <span>{link.title}</span>
-                  <small>{link.hint}</small>
-                </Link>
-              ))}
-            </div>
-          </div>
-
-          <div className="home-wow-metrics">
-            <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
-              {heroStats.map(item => (
-                <div key={item.label} className="home-stat-tile rounded-xl border border-border bg-panel px-4 py-3 text-sm text-muted">
-                  <div className="text-[11px] uppercase tracking-[0.18em] text-muted">{item.label}</div>
-                  <div className="mt-1 text-2xl font-semibold text-strong">{item.value}</div>
-                  <div className="home-sparkline mt-3" />
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section id="home-live" className="home-live-stage home-live-shell surface">
-        <div className="grid gap-6 lg:grid-cols-[1.03fr_0.97fr] lg:items-start">
-          <div className="home-live-info">
-            <div className="home-live-radar-card">
-              <span className="section-heading">Live Radar</span>
-              <h2 className="mt-3 text-2xl font-semibold text-strong">Real-time pulse, minimal load</h2>
-              <p className="mt-2 text-sm text-muted">
-                This panel is streamlined to surface the live feed, momentum shifts, and vote dynamics at a glance.
-              </p>
-            </div>
-
-            <div className="home-live-links">
-              {quickLinks.map(link => (
-                <Link
-                  key={`${link.href}-${link.title}`}
-                  to={link.href}
-                  className="home-quick-link group text-sm text-muted transition hover:-translate-y-1 hover:border-[rgba(34,211,238,0.3)]"
-                >
-                  <div className="flex items-center justify-between text-xs uppercase tracking-[0.14em] text-muted">
-                    <span>{link.hint}</span>
-                    <span className="text-[var(--accent-strong)] transition group-hover:text-[var(--accent)]">-&gt;</span>
-                  </div>
-                  <div className="mt-2 text-base font-semibold text-strong">{link.title}</div>
-                </Link>
-              ))}
-            </div>
-
-            <div className="home-live-side-fill">
-              <div className="home-live-side-header">
-                <span className="section-heading">Trending now</span>
-                <Link to="/leaderboard" className="btn-link text-xs">Full ranking</Link>
-              </div>
-              <div className="home-live-side-list">
-                {topLeaderboard.length === 0 && !leaderboard.isLoading ? (
-                  <p className="text-sm text-muted">No trending questions yet.</p>
-                ) : (
-                  topLeaderboard.slice(0, 3).map((item, index) => {
-                    const value = getLeaderboardValue(item)
-                    const targetId = item.questionId ?? item.id
-                    return (
-                      <Link
-                        key={`live-trending-${targetId ?? index}`}
-                        to={targetId ? `/questions/${targetId}` : '/leaderboard'}
-                        className="home-live-side-item"
-                      >
-                        <span className="home-live-side-rank">#{index + 1}</span>
-                        <span className="home-live-side-title">{item.title ?? 'Untitled question'}</span>
-                        <span className="home-live-side-value">{value}</span>
-                      </Link>
-                    )
-                  })
-                )}
-              </div>
-            </div>
-          </div>
-
-          <div className="home-live-card home-live-card-shell relative overflow-hidden shadow-[0_20px_60px_rgba(15,23,42,0.12)]">
-            <span className="home-live-card-noise" aria-hidden />
-            <span className="home-live-card-scan" aria-hidden />
-            <div className="absolute inset-0 bg-[var(--accent-muted)] opacity-35" />
-            <div className="relative flex items-center justify-between text-xs text-muted">
-              <span className="pill">Live question</span>
-              <span className="inline-flex items-center gap-2 rounded-full bg-[var(--surface-muted)] px-3 py-1 text-[11px] text-muted">
-                <span className="h-2 w-2 rounded-full bg-[var(--accent)] shadow-[0_0_0_6px_rgba(34,211,238,0.18)]" />
-                Live monitor
-              </span>
-            </div>
-            <h3 className="mt-5 text-2xl font-semibold text-strong">
-              {liveQuestion.isLoading ? 'Loading live question...' : liveQuestion.data?.title ?? 'No live question'}
-            </h3>
-            <p className="mt-2 text-sm text-muted">
-              {liveQuestion.data?.categoryName ? `Category: ${liveQuestion.data.categoryName}` : 'Live question stream.'}
-            </p>
-            <div className="home-wow-pulse home-live-pulse">
-              <div className="home-wow-pulse-label">
-                <span className="h-2.5 w-2.5 rounded-full bg-[var(--accent)] shadow-[0_0_0_8px_rgba(34,211,238,0.15)]" />
-                Global pulse
-              </div>
-              <div className="home-wow-pulse-grid">
-                <div>
-                  <small>Time left</small>
-                  <strong>{timeLeft}</strong>
-                </div>
-                <div>
-                  <small>Vote flow</small>
-                  <strong>Live</strong>
-                </div>
-                <div>
-                  <small>Trend</small>
-                  <strong>{liveQuestion.data?.type ?? 'Live'}</strong>
-                </div>
-              </div>
-            </div>
-            <div className="mt-6 space-y-3">
-              {(liveQuestion.data?.options ?? []).map(option => {
-                const percent = getLivePercent(option.optionId)
-                return (
-                  <div key={option.optionId} className="space-y-2">
-                    <div className="flex items-center justify-between text-sm text-muted">
-                      <span>{option.text}</span>
-                      <span className="font-semibold text-strong">{percent}%</span>
-                    </div>
-                    <div className="home-live-meter h-2 overflow-hidden rounded-full bg-[var(--surface-muted)]">
-                      <div
-                        className="h-full rounded-full bg-[var(--accent)] shadow-[0_10px_30px_rgba(34,211,238,0.25)]"
-                        style={{ width: `${percent}%` }}
-                      />
-                    </div>
-                  </div>
-                )
-              })}
-              {!liveQuestion.data?.options?.length && !liveQuestion.isLoading && (
-                <p className="text-sm text-muted">No options available right now.</p>
-              )}
-            </div>
-            {liveQuestion.data?.questionId && (
-              <div className="mt-6">
-                <Link to={`/questions/${liveQuestion.data.questionId}`} className="btn-ghost">
-                  Open live question
-                </Link>
-              </div>
-            )}
-          </div>
-        </div>
-      </section>
-
-      <section className="grid gap-4 lg:grid-cols-[1fr_0.92fr]">
-        <div className="home-insight-panel surface p-6 sm:p-8">
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <span className="section-heading">Discover</span>
-              <h2 className="mt-3 text-2xl font-semibold text-strong">Find your next category in one tap</h2>
-            </div>
-            <Link to="/categories" className="btn-ghost">All categories</Link>
-          </div>
-          <p className="mt-3 text-sm text-muted">
-            Jump straight into active topics, then move to relevant questions without digging through menus.
+        <div className="home-cosmos-copy">
+          <p className="home-cosmos-kicker">
+            <span aria-hidden />
+            WorldDeciding signal room
           </p>
+          <h1>Where opinions turn into a living map.</h1>
+          <p>
+            Step into live decisions, watch vote energy move, and jump between topics without breaking the flow.
+          </p>
+          <div className="home-cosmos-actions">
+            <Link to="/binary" className="home-cosmos-primary">
+              Start Either / Or
+            </Link>
+            <Link to="/questions" className="home-cosmos-secondary">
+              Browse questions
+            </Link>
+          </div>
+        </div>
 
-          <div className="home-category-cloud mt-6">
-            {categories.isLoading && <p className="text-sm text-muted">Loading categories...</p>}
-            {categories.isError && <p className="text-sm text-rose-600">Could not load categories.</p>}
+        <div className="home-orbit-board" aria-label="Live decision orbit">
+          <div className="home-orbit-rings" aria-hidden>
+            <span />
+            <span />
+            <span />
+          </div>
+          <div className="home-orbit-core">
+            <small>Live now</small>
+            <strong>{liveQuestion.isLoading ? 'Loading signal...' : liveQuestion.data?.categoryName ?? 'Global pulse'}</strong>
+            <span>{timeLeft}</span>
+          </div>
+          {quickLinks.map((link, index) => (
+            <Link
+              key={link.href}
+              to={link.href}
+              className={`home-orbit-chip chip-${index + 1}`}
+            >
+              <span>{link.hint}</span>
+              {link.title}
+            </Link>
+          ))}
+          <div className="home-orbit-question">
+            <small>Current question</small>
+            <p>{liveQuestion.data?.title ?? 'Live question stream is warming up.'}</p>
+          </div>
+        </div>
+      </section>
+
+      <section className="home-signal-strip" aria-label="Platform totals">
+        {heroStats.map((item, index) => (
+          <article key={item.label} style={{ '--delay': `${index * 90}ms` } as CSSProperties}>
+            <span>{item.label}</span>
+            <strong>{item.value}</strong>
+          </article>
+        ))}
+      </section>
+
+      <section className="home-command-grid">
+        <article className="home-live-console">
+          <div className="home-panel-head">
+            <div>
+              <p className="section-heading">Live console</p>
+              <h2>{liveQuestion.data?.title ?? 'Live question loading'}</h2>
+            </div>
+            <span className="home-live-status">
+              <span aria-hidden />
+              {liveStats.isFetching ? 'Syncing' : 'Live'}
+            </span>
+          </div>
+
+          <div className="home-live-meta">
+            <span>{liveQuestion.data?.categoryName ?? 'Global'}</span>
+            <span>{liveQuestion.data?.type ?? 'Decision'}</span>
+            <span>Rotates in {timeLeft}</span>
+          </div>
+
+          <div className="home-option-stream">
+            {liveOptions.map((option, index) => {
+              const percent = getLivePercent(option.optionId)
+              return (
+                <div key={option.optionId} className="home-option-row">
+                  <div>
+                    <span>{String(index + 1).padStart(2, '0')}</span>
+                    <strong>{option.text}</strong>
+                  </div>
+                  <em>{percent}%</em>
+                  <i aria-hidden style={{ width: `${percent}%` }} />
+                </div>
+              )
+            })}
+            {!liveOptions.length && !liveQuestion.isLoading ? (
+              <p className="home-empty-line">No live options are available right now.</p>
+            ) : null}
+            {liveQuestion.isLoading ? <p className="home-empty-line">Loading live options...</p> : null}
+          </div>
+
+          {liveQuestion.data?.questionId ? (
+            <Link to={`/questions/${liveQuestion.data.questionId}`} className="home-console-link">
+              Open live vote <span aria-hidden>-&gt;</span>
+            </Link>
+          ) : (
+            <Link to="/questions" className="home-console-link">
+              Open question stream <span aria-hidden>-&gt;</span>
+            </Link>
+          )}
+        </article>
+
+        <article className="home-category-lab">
+          <div className="home-panel-head compact">
+            <div>
+              <p className="section-heading">Topic portals</p>
+              <h2>Choose a world</h2>
+            </div>
+            <Link to="/categories">All</Link>
+          </div>
+          <div className="home-topic-cloud">
+            {categories.isLoading ? <span>Loading categories...</span> : null}
+            {categories.isError ? <span>Could not load categories.</span> : null}
             {!categories.isLoading &&
               !categories.isError &&
               topCategories.map((category, index) => (
                 <Link
                   key={category.id}
                   to={`/categories/${category.id}`}
-                  className="home-category-chip"
-                  style={{ animationDelay: `${index * 70}ms` }}
+                  style={{ '--delay': `${index * 70}ms` } as CSSProperties}
                 >
-                  <span className="home-category-chip-dot" aria-hidden />
+                  <span aria-hidden>{String(index + 1).padStart(2, '0')}</span>
                   {category.name}
                 </Link>
               ))}
           </div>
+        </article>
 
-          <div className="mt-6 grid gap-3 sm:grid-cols-2">
-            <Link to="/categories" className="home-route-card">
-              <p className="home-route-kicker">Category flow</p>
-              <h3>Explore category reel</h3>
-              <p>Swipe, tap, and open the newest category threads.</p>
-            </Link>
-            <Link to="/leaderboard" className="home-route-card">
-              <p className="home-route-kicker">Competition</p>
-              <h3>Open leaderboard</h3>
-              <p>Track which questions are getting the most votes this week.</p>
-            </Link>
-          </div>
-        </div>
-
-        <div className="home-insight-panel surface p-6 sm:p-8">
-          <div className="flex items-center justify-between gap-4">
+        <article className="home-momentum-stack">
+          <div className="home-panel-head compact">
             <div>
-              <span className="section-heading">Leaderboard</span>
-              <h2 className="mt-3 text-2xl font-semibold text-strong">What is trending right now</h2>
+              <p className="section-heading">Momentum</p>
+              <h2>Hot questions</h2>
             </div>
-            <Link to="/leaderboard" className="btn-primary">View leaderboard</Link>
+            <Link to="/leaderboard">Rankings</Link>
           </div>
-          <p className="mt-3 text-sm text-muted">
-            Live-ranked by vote momentum. Use this list to jump into the most active discussions.
-          </p>
-          <div className="mt-6 space-y-3">
-            {leaderboard.isLoading && <p className="text-sm text-muted">Loading leaderboard...</p>}
-            {leaderboard.isError && <p className="text-sm text-rose-600">Could not load leaderboard data.</p>}
-            {!leaderboard.isLoading && !leaderboard.isError && topLeaderboard.length === 0 && (
-              <p className="text-sm text-muted">No leaderboard entries yet.</p>
-            )}
+
+          <div className="home-momentum-list">
+            {leaderboard.isLoading ? <p className="home-empty-line">Loading leaderboard...</p> : null}
+            {leaderboard.isError ? <p className="home-empty-line">Could not load leaderboard.</p> : null}
+            {!leaderboard.isLoading && !leaderboard.isError && topLeaderboard.length === 0 ? (
+              <p className="home-empty-line">No leaderboard entries yet.</p>
+            ) : null}
             {topLeaderboard.map((item, index) => {
               const value = getLeaderboardValue(item)
               const topValue = getLeaderboardValue(topLeaderboard[0] ?? {})
@@ -415,23 +344,21 @@ export default function Home() {
                 <Link
                   key={`${targetId ?? item.title ?? index}`}
                   to={targetId ? `/questions/${targetId}` : '/leaderboard'}
-                  className="home-rank-item"
+                  className="home-momentum-item"
                 >
-                  <span className="home-rank-pos">#{index + 1}</span>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold text-strong">{item.title ?? 'Untitled question'}</p>
-                    <p className="mt-1 text-xs text-muted">
-                      {(item.categoryName ?? item.categorySlug ?? 'General')} - {value} votes
-                    </p>
-                    <span className="home-rank-meter" aria-hidden>
-                      <span style={{ width: `${width}%` }} />
-                    </span>
+                  <span>#{index + 1}</span>
+                  <div>
+                    <strong>{item.title ?? 'Untitled question'}</strong>
+                    <small>{item.categoryName ?? item.categorySlug ?? 'General'} - {value} votes</small>
+                    <i aria-hidden>
+                      <b style={{ width: `${width}%` }} />
+                    </i>
                   </div>
                 </Link>
               )
             })}
           </div>
-        </div>
+        </article>
       </section>
     </div>
   )
