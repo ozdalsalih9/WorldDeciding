@@ -181,7 +181,7 @@ export default function Home() {
   const liveOptions = liveQuestion.data?.options ?? []
 
   return (
-    <div className="home-cosmos container-page">
+    <div className="home-cosmos">
       <section className="home-cosmos-hero" aria-label="WorldDeciding live dashboard">
         <span className="home-cosmos-grid" aria-hidden />
         <span className="home-cosmos-glow one" aria-hidden />

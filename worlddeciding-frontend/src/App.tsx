@@ -169,7 +169,17 @@ export default function App() {
 
       {!isAuthPage ? <Navbar /> : null}
 
-      <main className={`app-main ${mainLayoutClass}${isAuthPage ? '' : ' container-page'}`}>
+      <main
+        className={`app-main ${mainLayoutClass}${
+          isAuthPage
+            ? ''
+            : isHomePage
+              ? ' home-main full-bleed-main'
+              : isQuestionDetailPage
+                ? ' full-bleed-main'
+                : ' container-page'
+        }`}
+      >
         <Suspense fallback={<RouteFallback />}>
           <Routes>
             <Route path="/" element={<Home />} />
