@@ -1,4 +1,4 @@
-﻿using MediatR;
+using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -868,114 +868,183 @@ public class AuthController : ControllerBase
         var safeAccentA = WebUtility.HtmlEncode(accentA);
         var safeAccentB = WebUtility.HtmlEncode(accentB);
 
-        return $"""
+        return $$"""
     <!doctype html>
     <html lang="en">
     <head>
       <meta charset="utf-8" />
       <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-      <meta name="x-apple-disable-message-reformatting" />
-      <meta name="format-detection" content="telephone=no,date=no,address=no,email=no,url=no" />
-      <title>{safeTitle}</title>
+      <title>{{safeTitle}}</title>
+      <style>
+        body {
+          margin: 0;
+          padding: 0;
+          background-color: #f4f7fa;
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+          color: #333333;
+        }
+        .container {
+          max-width: 600px;
+          margin: 0 auto;
+          background-color: #ffffff;
+          border-radius: 8px;
+          overflow: hidden;
+          box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+        }
+        .header {
+          background-color: {{safeAccentA}};
+          padding: 24px;
+          text-align: center;
+          color: #ffffff;
+        }
+        .content {
+          padding: 32px 24px;
+        }
+        .eyebrow {
+          font-size: 12px;
+          text-transform: uppercase;
+          letter-spacing: 1px;
+          color: #666666;
+          margin-bottom: 8px;
+        }
+        h1 {
+          margin: 0 0 16px 0;
+          font-size: 24px;
+          color: #111111;
+        }
+        p {
+          margin: 0 0 24px 0;
+          font-size: 16px;
+          line-height: 1.5;
+          color: #444444;
+        }
+        .button-container {
+          text-align: center;
+          margin: 32px 0;
+        }
+        .button {
+          display: inline-block;
+          padding: 14px 28px;
+          background-color: {{safeAccentA}};
+          color: #ffffff !important;
+          text-decoration: none;
+          border-radius: 6px;
+          font-weight: bold;
+          font-size: 16px;
+        }
+        .helper-box {
+          background-color: #f8f9fa;
+          border: 1px solid #e9ecef;
+          border-radius: 6px;
+          padding: 16px;
+          margin-bottom: 24px;
+        }
+        .helper-title {
+          font-size: 12px;
+          font-weight: bold;
+          text-transform: uppercase;
+          color: #555555;
+          margin-bottom: 8px;
+        }
+        .helper-value {
+          font-family: monospace;
+          font-size: 13px;
+          color: #333333;
+          word-break: break-all;
+        }
+        .footer {
+          padding: 24px;
+          text-align: center;
+          font-size: 12px;
+          color: #888888;
+          background-color: transparent;
+        }
+        .note-title {
+          font-weight: bold;
+          margin-bottom: 4px;
+        }
+        .divider {
+          margin-top: 32px; 
+          padding-top: 24px; 
+          border-top: 1px solid #e9ecef;
+        }
+        
+        @media (prefers-color-scheme: dark) {
+          body {
+            background-color: #121212 !important;
+            color: #e0e0e0 !important;
+          }
+          .container {
+            background-color: #1e1e1e !important;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5) !important;
+          }
+          .eyebrow {
+            color: #aaaaaa !important;
+          }
+          h1 {
+            color: #ffffff !important;
+          }
+          p {
+            color: #cccccc !important;
+          }
+          .helper-box {
+            background-color: #2c2c2c !important;
+            border-color: #444444 !important;
+          }
+          .helper-title {
+            color: #999999 !important;
+          }
+          .helper-value {
+            color: #eeeeee !important;
+          }
+          .divider {
+            border-top-color: #444444 !important;
+          }
+        }
+      </style>
     </head>
-    <body style="margin:0;padding:0;background-color:#edf4ff;font-family:Arial,Helvetica,sans-serif;color:#0f172a;">
-      <div style="display:none;font-size:1px;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;mso-hide:all;">
-        {safePreheader}
+    <body>
+      <!-- Preheader -->
+      <div style="display: none; max-height: 0px; overflow: hidden;">
+        {{safePreheader}}
       </div>
-      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%;margin:0;padding:0;border-collapse:collapse;background-color:#edf4ff;">
+
+      <table width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%; background-color: transparent;">
         <tr>
-          <td align="center" style="padding:20px 12px;">
-            <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%;max-width:600px;border-collapse:collapse;">
+          <td align="center" style="padding: 20px 10px;">
+            <table class="container" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%; max-width: 600px;">
               <tr>
-                <td align="center" style="padding:0 0 14px 0;">
-                  <span style="display:inline-block;padding:8px 14px;border-radius:999px;background-color:#ffffff;border:1px solid #d6e2f5;color:#35507a;font-size:11px;font-weight:700;letter-spacing:0.18em;text-transform:uppercase;">
-                    WorldDeciding
-                  </span>
+                <td class="header" style="padding: 24px; text-align: center;">
+                  <strong style="letter-spacing: 2px; font-size: 18px;">WORLDDECIDING</strong>
                 </td>
               </tr>
               <tr>
-                <td style="border-radius:24px;background-color:#ffffff;border:1px solid #d6e2f5;box-shadow:0 12px 30px rgba(15,23,42,0.10);overflow:hidden;">
-                  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%;border-collapse:collapse;background-color:#ffffff;">
-                    <tr>
-                      <td style="height:6px;line-height:6px;font-size:0;background-color:{safeAccentA};">
-                        &nbsp;
-                      </td>
-                    </tr>
-                    <tr>
-                      <td style="padding:28px 22px 14px 22px;">
-                        <div style="display:inline-block;padding:7px 12px;border-radius:999px;background-color:#eef3ff;color:#31527e;font-size:11px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;">
-                          {safeEyebrow}
-                        </div>
-                        <h1 style="margin:18px 0 12px 0;font-size:30px;line-height:1.2;color:#0b1726;font-weight:700;">
-                          {safeTitle}
-                        </h1>
-                        <p style="margin:0;font-size:16px;line-height:1.7;color:#4a6287;">
-                          {safeLead}
-                        </p>
-                      </td>
-                    </tr>
-                    <tr>
-                      <td style="padding:0 22px 10px 22px;">
-                        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%;border-collapse:collapse;">
-                          <tr>
-                            <td style="padding:18px;border-radius:18px;background-color:#f7faff;border:1px solid #dce7f6;">
-                              <div style="font-size:13px;line-height:1.7;color:#4a6287;">
-                                Secure account action for WorldDeciding.
-                              </div>
-                              <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-top:18px;border-collapse:separate;">
-                                <tr>
-                                  <td align="center" style="border-radius:14px;background-color:{safeAccentA};">
-                                    <a href="{safeActionUrl}" style="display:block;padding:14px 22px;border-radius:14px;background-color:{safeAccentA};color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;letter-spacing:0.01em;">
-                                      {safeActionLabel}
-                                    </a>
-                                  </td>
-                                </tr>
-                              </table>
-                            </td>
-                          </tr>
-                        </table>
-                      </td>
-                    </tr>
-                    <tr>
-                      <td style="padding:12px 22px 10px 22px;">
-                        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%;border-collapse:collapse;">
-                          <tr>
-                            <td style="padding:18px 16px 16px 16px;border-radius:18px;background-color:#ffffff;border:1px solid #dce7f6;">
-                              <div style="font-size:12px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:#3b5b86;">
-                                {safeHelperTitle}
-                              </div>
-                              <p style="margin:10px 0 0 0;font-size:14px;line-height:1.7;color:#5a7195;">
-                                {safeHelperCopy}
-                              </p>
-                              <div style="margin-top:14px;padding:14px 16px;border-radius:14px;background-color:#f8fbff;border:1px solid #d6e2f5;font-size:13px;line-height:1.7;color:#0f2742;word-break:break-word;">
-                                {safeHelperValue}
-                              </div>
-                            </td>
-                          </tr>
-                        </table>
-                      </td>
-                    </tr>
-                    <tr>
-                      <td style="padding:10px 22px 28px 22px;">
-                        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%;border-collapse:collapse;">
-                          <tr>
-                            <td style="padding:16px;border-radius:18px;background-color:#f7faff;border:1px solid #dce7f6;">
-                              <div style="font-size:12px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:#304f78;">
-                                {safeNoteTitle}
-                              </div>
-                              <p style="margin:10px 0 0 0;font-size:14px;line-height:1.7;color:#617795;">
-                                {safeNoteCopy}
-                              </p>
-                            </td>
-                          </tr>
-                        </table>
-                      </td>
-                    </tr>
-                  </table>
+                <td class="content" style="padding: 32px 24px;">
+                  <div class="eyebrow">{{safeEyebrow}}</div>
+                  <h1>{{safeTitle}}</h1>
+                  <p>{{safeLead}}</p>
+                  
+                  <div class="button-container">
+                    <a href="{{safeActionUrl}}" class="button">{{safeActionLabel}}</a>
+                  </div>
+
+                  <div class="helper-box">
+                    <div class="helper-title">{{safeHelperTitle}}</div>
+                    <p style="font-size: 14px; margin-bottom: 8px;">{{safeHelperCopy}}</p>
+                    <div class="helper-value">{{safeHelperValue}}</div>
+                  </div>
+
+                  <div class="divider">
+                    <div class="note-title">{{safeNoteTitle}}</div>
+                    <p style="font-size: 13px; margin-bottom: 0;">{{safeNoteCopy}}</p>
+                  </div>
                 </td>
               </tr>
+            </table>
+            
+            <table width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%; max-width: 600px;">
               <tr>
-                <td style="padding:14px 16px 0 16px;text-align:center;font-size:12px;line-height:1.7;color:#6f85a6;">
+                <td class="footer">
                   WorldDeciding account security email. Please do not reply to this automated message.
                 </td>
               </tr>
