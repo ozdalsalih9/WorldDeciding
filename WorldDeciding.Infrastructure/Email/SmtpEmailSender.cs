@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Options;
 using System.Net;
 using System.Net.Mail;
 using System.Text.RegularExpressions;
@@ -34,8 +34,6 @@ public class SmtpEmailSender : IEmailSender
         {
             From = new MailAddress(fromAddr.Address, fromName, Encoding.UTF8),
             Subject = subject ?? "",
-            Body = htmlBody ?? "",
-            IsBodyHtml = true,
             BodyEncoding = Encoding.UTF8,
             SubjectEncoding = Encoding.UTF8
         };
@@ -43,11 +41,20 @@ public class SmtpEmailSender : IEmailSender
         message.To.Add(toAddr);
         message.ReplyToList.Add(new MailAddress(fromAddr.Address, fromName, Encoding.UTF8));
         message.Headers.Add("X-Auto-Response-Suppress", "All");
+
+        // Order is important for MIME multipart/alternative:
+        // Plain text first, then HTML (most preferred format last).
         message.AlternateViews.Add(
             AlternateView.CreateAlternateViewFromString(
                 BuildPlainTextBody(htmlBody),
                 Encoding.UTF8,
                 "text/plain"));
+
+        message.AlternateViews.Add(
+            AlternateView.CreateAlternateViewFromString(
+                htmlBody ?? "",
+                Encoding.UTF8,
+                "text/html"));
 
         using var client = new SmtpClient((_options.Host ?? "").Trim(), _options.Port)
         {
@@ -65,7 +72,12 @@ public class SmtpEmailSender : IEmailSender
             return string.Empty;
         }
 
-        var text = Regex.Replace(htmlBody, "<br\\s*/?>", "\n", RegexOptions.IgnoreCase);
+        // Remove <head> and <style> and <script> blocks entirely along with their contents
+        var text = Regex.Replace(htmlBody, @"<head[^>]*>[\s\S]*?</head>", string.Empty, RegexOptions.IgnoreCase);
+        text = Regex.Replace(text, @"<style[^>]*>[\s\S]*?</style>", string.Empty, RegexOptions.IgnoreCase);
+        text = Regex.Replace(text, @"<script[^>]*>[\s\S]*?</script>", string.Empty, RegexOptions.IgnoreCase);
+
+        text = Regex.Replace(text, "<br\\s*/?>", "\n", RegexOptions.IgnoreCase);
         text = Regex.Replace(text, "</p\\s*>", "\n\n", RegexOptions.IgnoreCase);
         text = Regex.Replace(text, "<[^>]+>", string.Empty);
         text = WebUtility.HtmlDecode(text);
